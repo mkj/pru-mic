@@ -27,15 +27,15 @@
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/dma-mapping.h>
+#include <linux/remoteproc.h>
+
+#include "bulk_samp.h"
 
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
 #define RPMSG_BUF_SIZE				(512)
 #define MAX_FIFO_MSG				(32)
 #define FIFO_MSG_SIZE				RPMSG_BUF_SIZE
-
-#define NUM_SAMPLE_BUFFERS          (2)
-#define SAMPLE_BUFFER_SIZE          (4*1024*1024)
 
 /**
  * struct rpmsg_pru_dev - Structure that contains the per-device data
@@ -67,8 +67,8 @@ struct rpmsg_pru_dev {
 	int msg_idx_rd;
 	int msg_idx_wr;
 	wait_queue_head_t wait_list;
-	void* sample_buffers[NUM_SAMPLE_BUFFERS];
-	dma_addr_t sample_buffers_phys[NUM_SAMPLE_BUFFERS];
+	void* sample_buffers[BULK_SAMP_NUM_BUFFERS];
+	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
 };
 
 static struct class *rpmsg_pru_class;
@@ -212,12 +212,28 @@ static void rpmsg_pru_cb(struct rpmsg_channel *rpdev, void *data, int len,
 	wake_up_interruptible(&prudev->wait_list);
 }
 
+/* copypaste from rpmsg_rpc.c */
+static struct rproc *rpdev_to_rproc(struct rpmsg_channel *rpdev)
+{
+    struct virtio_device *vdev;
+
+    vdev = rpmsg_get_virtio_dev(rpdev);
+    if (!vdev)
+        return NULL;
+
+    return rproc_vdev_to_rproc_safe(vdev);
+}
+
 static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 {
 	int ret;
 	struct rpmsg_pru_dev *prudev;
 	int minor_got;
     int i;
+    struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS };
+    struct rproc *rp;
+
+    rp = rpdev_to_rproc(rpdev);
 
 	prudev = devm_kzalloc(&rpdev->dev, sizeof(*prudev), GFP_KERNEL);
 	if (!prudev)
@@ -261,13 +277,23 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 		goto fail_alloc_fifo;
 	}
 
-	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
+    /* Allocate large buffers for data transfer. */
+	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
+        u64 da;
+        /* TODO: for better performance this could use streaming DMA but
+         * for now we use the simpler solution of coherent buffers */
 		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev, 
-				SAMPLE_BUFFER_SIZE, &prudev->sample_buffers_phys[i], GFP_KERNEL);
+				BULK_SAMP_BUFFER_SIZE, &prudev->sample_buffers_phys[i], GFP_KERNEL);
 		if (!prudev->sample_buffers[i]) { 
 			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the rpmsg_pru device\n");
 			goto fail_alloc_buffers;
 		}
+        if (rproc_pa_to_da(rp, prudev->sample_buffers_phys[i], &da) == 0) {
+            buf_msg.buffers[i] = (uint32_t)da;
+        } else {
+			dev_err(&rpdev->dev, "Unable to map physical address %llu to device.\n", (u64)prudev->sample_buffers_phys[i]);
+			goto fail_alloc_buffers;
+        }
 	}
 
 	init_waitqueue_head(&prudev->wait_list);
@@ -277,13 +303,18 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 	dev_info(&rpdev->dev, "new rpmsg_pru device: /dev/rpmsg_pru%d",
 		 rpdev->dst);
 
+	ret = rpmsg_send(prudev->rpdev, &buf_msg, sizeof(buf_msg));
+	if (ret) {
+		dev_err(prudev->dev, "rpmsg_send buf_msg failed: %d\n", ret);
+    }
+
 	return 0;
 
 fail_alloc_buffers:
 	kfifo_free(&prudev->msg_fifo);
-	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
+	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
 		if (prudev->sample_buffers[i]) {
-			dma_free_coherent(prudev->dev, SAMPLE_BUFFER_SIZE, 
+			dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
                     prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
 		}
 	}
@@ -306,8 +337,8 @@ static void rpmsg_pru_remove(struct rpmsg_channel *rpdev)
 
 	prudev = dev_get_drvdata(&rpdev->dev);
 
-	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
-        dma_free_coherent(prudev->dev, SAMPLE_BUFFER_SIZE, 
+	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
+        dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
                 prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
 	}
 	kfifo_free(&prudev->msg_fifo);

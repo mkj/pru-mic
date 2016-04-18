@@ -1,4 +1,4 @@
-obj-m := mic_pru.o
+obj-m := bulk_samp.o
 
 KSRC = /lib/modules/$(shell uname -r)/build
 
