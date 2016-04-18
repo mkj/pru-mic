@@ -26,12 +26,12 @@
 #include <linux/init.h>
 #include <linux/cdev.h>
 #include <linux/module.h>
-#include <linux/kfifo.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/dma-mapping.h>
 #include <linux/remoteproc.h>
+#include <linux/string.h>
 
 #include "bulk_samp.h"
 
@@ -48,10 +48,6 @@
  * @cdev: character device
  * @locked: boolean used to determine whether or not the device file is in use
  * @devt: dev_t structure for the bulk_samp device
- * @msg_fifo: kernel fifo used to buffer the messages between userspace and PRU
- * @msg_len: array storing the lengths of each message in the kernel fifo
- * @msg_idx_rd: kernel fifo read index
- * @msg_idx_wr: kernel fifo write index
  * @wait_list: wait queue used to implement the poll operation of the character
  *             device
  *
@@ -66,19 +62,27 @@ struct bulk_samp_dev {
 	struct cdev cdev;
 	bool locked;
 	dev_t devt;
-	struct kfifo msg_fifo;
-	u32 msg_len[MAX_FIFO_MSG];
-	int msg_idx_rd;
-	int msg_idx_wr;
 	wait_queue_head_t wait_list;
 	void* sample_buffers[BULK_SAMP_NUM_BUFFERS];
 	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
+    // XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
+    int read_idx;
+    size_t read_off; // index into current sample_buffers[read_idx]
+    int write_idx;
 };
 
 static struct class *bulk_samp_class;
 static dev_t bulk_samp_devt;
 static DEFINE_MUTEX(bulk_samp_lock);
 static DEFINE_IDR(bulk_samp_minors);
+
+static int bulk_samp_is_empty(struct bulk_samp_dev *d) {
+    return d->write_idx == d->read_idx;
+}
+
+static int bulk_samp_is_full(struct bulk_samp_dev *d) {
+    return (d->write_idx+1)%BULK_SAMP_NUM_BUFFERS == d->read_idx;
+}
 
 static int bulk_samp_open(struct inode *inode, struct file *filp)
 {
@@ -116,51 +120,30 @@ static ssize_t bulk_samp_read(struct file *filp, char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
 	int ret;
-	u32 length;
+	size_t length;
 	struct bulk_samp_dev *prudev;
 
 	prudev = filp->private_data;
 
-	if (kfifo_is_empty(&prudev->msg_fifo) &&
-	    (filp->f_flags & O_NONBLOCK))
+	if (bulk_samp_is_empty(prudev) && (filp->f_flags & O_NONBLOCK))
 		return -EAGAIN;
 
 	ret = wait_event_interruptible(prudev->wait_list,
-				       !kfifo_is_empty(&prudev->msg_fifo));
+				       !bulk_samp_is_empty(prudev));
 	if (ret)
 		return -EINTR;
 
-	ret = kfifo_to_user(&prudev->msg_fifo, buf,
-			    prudev->msg_len[prudev->msg_idx_rd], &length);
-	prudev->msg_idx_rd = (prudev->msg_idx_rd + 1) % MAX_FIFO_MSG;
+    length = min(BULK_SAMP_BUFFER_SIZE - prudev->read_off, count);
+    ret = copy_to_user(buf, prudev->sample_buffers[prudev->read_idx]+prudev->read_off, length);
+
+    prudev->read_off += (length - ret);
+    if (prudev->read_off == BULK_SAMP_BUFFER_SIZE) {
+        prudev->read_idx++;
+        prudev->read_idx %= BULK_SAMP_NUM_BUFFERS;
+        prudev->read_off = 0;
+    }
 
 	return ret ? ret : length;
-}
-
-static ssize_t bulk_samp_write(struct file *filp, const char __user *buf,
-			       size_t count, loff_t *f_pos)
-{
-	int ret;
-	struct bulk_samp_dev *prudev;
-	static char bulk_samp_buf[RPMSG_BUF_SIZE];
-
-	prudev = filp->private_data;
-
-	if (count > RPMSG_BUF_SIZE - sizeof(struct rpmsg_hdr)) {
-		dev_err(prudev->dev, "Data too large for RPMsg Buffer\n");
-		return -EINVAL;
-	}
-
-	if (copy_from_user(bulk_samp_buf, buf, count)) {
-		dev_err(prudev->dev, "Error copying buffer from user space");
-		return -EFAULT;
-	}
-
-	ret = rpmsg_send(prudev->rpdev, (void *)bulk_samp_buf, count);
-	if (ret)
-		dev_err(prudev->dev, "rpmsg_send failed: %d\n", ret);
-
-	return ret ? ret : count;
 }
 
 static unsigned int bulk_samp_poll(struct file *filp,
@@ -175,7 +158,7 @@ static unsigned int bulk_samp_poll(struct file *filp,
 
 	mask = POLLOUT | POLLWRNORM;
 
-	if (!kfifo_is_empty(&prudev->msg_fifo))
+	if (!bulk_samp_is_empty(prudev))
 		mask |= POLLIN | POLLRDNORM;
 
 	return mask;
@@ -186,34 +169,48 @@ static const struct file_operations bulk_samp_fops = {
 	.open = bulk_samp_open,
 	.release = bulk_samp_release,
 	.read = bulk_samp_read,
-	.write = bulk_samp_write,
 	.poll = bulk_samp_poll,
 };
+
+static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len) 
+{
+	struct bulk_samp_dev *prudev;
+    struct bulk_samp_msg_ready *msg = data;
+	prudev = dev_get_drvdata(&rpdev->dev);
+
+    /* XXX handle 'msg' here, validate index etc */
+
+
+	if (bulk_samp_is_full(prudev)) {
+		dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
+		return;
+	}
+
+    prudev->write_idx++;
+    prudev->write_idx %= BULK_SAMP_NUM_BUFFERS;
+
+	wake_up_interruptible(&prudev->wait_list);
+}
 
 static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			 void *priv, u32 src)
 {
-	u32 length;
-	struct bulk_samp_dev *prudev;
+    char type;
 
-	prudev = dev_get_drvdata(&rpdev->dev);
-
-	if (kfifo_avail(&prudev->msg_fifo) < len) {
-		dev_err(&rpdev->dev, "Not enough space on the FIFO\n");
+    if (len < 1) {
+		dev_err(&rpdev->dev, "Short message from PRU!\n");
 		return;
-	}
+    }
+    
+    type = *(char*)data;
 
-	if ((prudev->msg_idx_wr + 1) % MAX_FIFO_MSG ==
-		prudev->msg_idx_rd) {
-		dev_err(&rpdev->dev, "Message length table is full\n");
+    if (type == BULK_SAMP_MSG_READY) {
+        handle_msg_ready(rpdev, data, len);
+    } else {
+		dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
 		return;
-	}
+    }
 
-	length = kfifo_in(&prudev->msg_fifo, data, len);
-	prudev->msg_len[prudev->msg_idx_wr] = length;
-	prudev->msg_idx_wr = (prudev->msg_idx_wr + 1) % MAX_FIFO_MSG;
-
-	wake_up_interruptible(&prudev->wait_list);
 }
 
 /* copypaste from rpmsg_rpc.c */
@@ -274,13 +271,6 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 
 	prudev->rpdev = rpdev;
 
-	ret = kfifo_alloc(&prudev->msg_fifo, MAX_FIFO_MSG * FIFO_MSG_SIZE,
-			  GFP_KERNEL);
-	if (ret) {
-		dev_err(&rpdev->dev, "Unable to allocate fifo for the bulk_samp device\n");
-		goto fail_alloc_fifo;
-	}
-
     /* Allocate large buffers for data transfer. */
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
         u64 da;
@@ -292,6 +282,9 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the bulk_samp device\n");
 			goto fail_alloc_buffers;
 		}
+        /* clear it to avoid bugs exposing kernel memory */
+        memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
+
         if (rproc_pa_to_da(rp, prudev->sample_buffers_phys[i], &da) == 0) {
             buf_msg.buffers[i] = (uint32_t)da;
         } else {
@@ -315,14 +308,12 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	return 0;
 
 fail_alloc_buffers:
-	kfifo_free(&prudev->msg_fifo);
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
 		if (prudev->sample_buffers[i]) {
 			dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
                     prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
 		}
 	}
-fail_alloc_fifo:
 	device_destroy(bulk_samp_class, prudev->devt);
 fail_create_device:
 	cdev_del(&prudev->cdev);
@@ -345,7 +336,6 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
         dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
                 prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
 	}
-	kfifo_free(&prudev->msg_fifo);
 	device_destroy(bulk_samp_class, prudev->devt);
 	cdev_del(&prudev->cdev);
 	mutex_lock(&bulk_samp_lock);
