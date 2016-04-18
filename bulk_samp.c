@@ -1,4 +1,5 @@
 /*
+ * Based on rpmsg_pru.c:
  * PRU Remote Processor Messaging Driver
  *
  * Copyright (C) 2015 Texas Instruments, Inc.
@@ -13,6 +14,9 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * Modified/renamed April 2016 by Matt Johnston <matt@ucc.asn.au>
+ * to allocate large sample buffers.
  */
 
 #include <linux/kernel.h>
@@ -38,12 +42,12 @@
 #define FIFO_MSG_SIZE				RPMSG_BUF_SIZE
 
 /**
- * struct rpmsg_pru_dev - Structure that contains the per-device data
- * @rpdev: rpmsg channel device that is associated with this rpmsg_pru device
+ * struct bulk_samp_dev - Structure that contains the per-device data
+ * @rpdev: rpmsg channel device that is associated with this bulk_samp device
  * @dev: device
  * @cdev: character device
  * @locked: boolean used to determine whether or not the device file is in use
- * @devt: dev_t structure for the rpmsg_pru device
+ * @devt: dev_t structure for the bulk_samp device
  * @msg_fifo: kernel fifo used to buffer the messages between userspace and PRU
  * @msg_len: array storing the lengths of each message in the kernel fifo
  * @msg_idx_rd: kernel fifo read index
@@ -51,12 +55,12 @@
  * @wait_list: wait queue used to implement the poll operation of the character
  *             device
  *
- * Each rpmsg_pru device provides an interface, using an rpmsg channel (rpdev),
+ * Each bulk_samp device provides an interface, using an rpmsg channel (rpdev),
  * between a user space character device (cdev) and a PRU core. A kernel fifo
  * (msg_fifo) is used to buffer the messages in the kernel that are
  * being passed between the character device and the PRU.
  */
-struct rpmsg_pru_dev {
+struct bulk_samp_dev {
 	struct rpmsg_channel *rpdev;
 	struct device *dev;
 	struct cdev cdev;
@@ -71,25 +75,25 @@ struct rpmsg_pru_dev {
 	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
 };
 
-static struct class *rpmsg_pru_class;
-static dev_t rpmsg_pru_devt;
-static DEFINE_MUTEX(rpmsg_pru_lock);
-static DEFINE_IDR(rpmsg_pru_minors);
+static struct class *bulk_samp_class;
+static dev_t bulk_samp_devt;
+static DEFINE_MUTEX(bulk_samp_lock);
+static DEFINE_IDR(bulk_samp_minors);
 
-static int rpmsg_pru_open(struct inode *inode, struct file *filp)
+static int bulk_samp_open(struct inode *inode, struct file *filp)
 {
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 	int ret = -EACCES;
 
-	prudev = container_of(inode->i_cdev, struct rpmsg_pru_dev, cdev);
+	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
-	mutex_lock(&rpmsg_pru_lock);
+	mutex_lock(&bulk_samp_lock);
 	if (!prudev->locked) {
 		prudev->locked = true;
 		filp->private_data = prudev;
 		ret = 0;
 	}
-	mutex_unlock(&rpmsg_pru_lock);
+	mutex_unlock(&bulk_samp_lock);
 
 	if (ret)
 		dev_err(prudev->dev, "Device already open\n");
@@ -97,23 +101,23 @@ static int rpmsg_pru_open(struct inode *inode, struct file *filp)
 	return ret;
 }
 
-static int rpmsg_pru_release(struct inode *inode, struct file *filp)
+static int bulk_samp_release(struct inode *inode, struct file *filp)
 {
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 
-	prudev = container_of(inode->i_cdev, struct rpmsg_pru_dev, cdev);
-	mutex_lock(&rpmsg_pru_lock);
+	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
+	mutex_lock(&bulk_samp_lock);
 	prudev->locked = false;
-	mutex_unlock(&rpmsg_pru_lock);
+	mutex_unlock(&bulk_samp_lock);
 	return 0;
 }
 
-static ssize_t rpmsg_pru_read(struct file *filp, char __user *buf,
+static ssize_t bulk_samp_read(struct file *filp, char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
 	int ret;
 	u32 length;
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 
 	prudev = filp->private_data;
 
@@ -133,12 +137,12 @@ static ssize_t rpmsg_pru_read(struct file *filp, char __user *buf,
 	return ret ? ret : length;
 }
 
-static ssize_t rpmsg_pru_write(struct file *filp, const char __user *buf,
+static ssize_t bulk_samp_write(struct file *filp, const char __user *buf,
 			       size_t count, loff_t *f_pos)
 {
 	int ret;
-	struct rpmsg_pru_dev *prudev;
-	static char rpmsg_pru_buf[RPMSG_BUF_SIZE];
+	struct bulk_samp_dev *prudev;
+	static char bulk_samp_buf[RPMSG_BUF_SIZE];
 
 	prudev = filp->private_data;
 
@@ -147,23 +151,23 @@ static ssize_t rpmsg_pru_write(struct file *filp, const char __user *buf,
 		return -EINVAL;
 	}
 
-	if (copy_from_user(rpmsg_pru_buf, buf, count)) {
+	if (copy_from_user(bulk_samp_buf, buf, count)) {
 		dev_err(prudev->dev, "Error copying buffer from user space");
 		return -EFAULT;
 	}
 
-	ret = rpmsg_send(prudev->rpdev, (void *)rpmsg_pru_buf, count);
+	ret = rpmsg_send(prudev->rpdev, (void *)bulk_samp_buf, count);
 	if (ret)
 		dev_err(prudev->dev, "rpmsg_send failed: %d\n", ret);
 
 	return ret ? ret : count;
 }
 
-static unsigned int rpmsg_pru_poll(struct file *filp,
+static unsigned int bulk_samp_poll(struct file *filp,
 				   struct poll_table_struct *wait)
 {
 	int mask;
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 
 	prudev = filp->private_data;
 
@@ -177,20 +181,20 @@ static unsigned int rpmsg_pru_poll(struct file *filp,
 	return mask;
 }
 
-static const struct file_operations rpmsg_pru_fops = {
+static const struct file_operations bulk_samp_fops = {
 	.owner = THIS_MODULE,
-	.open = rpmsg_pru_open,
-	.release = rpmsg_pru_release,
-	.read = rpmsg_pru_read,
-	.write = rpmsg_pru_write,
-	.poll = rpmsg_pru_poll,
+	.open = bulk_samp_open,
+	.release = bulk_samp_release,
+	.read = bulk_samp_read,
+	.write = bulk_samp_write,
+	.poll = bulk_samp_poll,
 };
 
-static void rpmsg_pru_cb(struct rpmsg_channel *rpdev, void *data, int len,
+static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			 void *priv, u32 src)
 {
 	u32 length;
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 
 	prudev = dev_get_drvdata(&rpdev->dev);
 
@@ -224,10 +228,10 @@ static struct rproc *rpdev_to_rproc(struct rpmsg_channel *rpdev)
     return rproc_vdev_to_rproc_safe(vdev);
 }
 
-static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
+static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 {
 	int ret;
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
 	int minor_got;
     int i;
     struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS };
@@ -239,31 +243,31 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 	if (!prudev)
 		return -ENOMEM;
 
-	mutex_lock(&rpmsg_pru_lock);
-	minor_got = idr_alloc(&rpmsg_pru_minors, prudev, 0, PRU_MAX_DEVICES,
+	mutex_lock(&bulk_samp_lock);
+	minor_got = idr_alloc(&bulk_samp_minors, prudev, 0, PRU_MAX_DEVICES,
 			      GFP_KERNEL);
-	mutex_unlock(&rpmsg_pru_lock);
+	mutex_unlock(&bulk_samp_lock);
 	if (minor_got < 0) {
 		ret = minor_got;
-		dev_err(&rpdev->dev, "Failed to get a minor number for the rpmsg_pru device: %d\n",
+		dev_err(&rpdev->dev, "Failed to get a minor number for the bulk_samp device: %d\n",
 			ret);
 		goto fail_alloc_minor;
 	}
 
-	prudev->devt = MKDEV(MAJOR(rpmsg_pru_devt), minor_got);
+	prudev->devt = MKDEV(MAJOR(bulk_samp_devt), minor_got);
 
-	cdev_init(&prudev->cdev, &rpmsg_pru_fops);
+	cdev_init(&prudev->cdev, &bulk_samp_fops);
 	prudev->cdev.owner = THIS_MODULE;
 	ret = cdev_add(&prudev->cdev, prudev->devt, 1);
 	if (ret) {
-		dev_err(&rpdev->dev, "Unable to add cdev for the rpmsg_pru device\n");
+		dev_err(&rpdev->dev, "Unable to add cdev for the bulk_samp device\n");
 		goto fail_add_cdev;
 	}
 
-	prudev->dev = device_create(rpmsg_pru_class, &rpdev->dev, prudev->devt,
-				    NULL, "rpmsg_pru%d", rpdev->dst);
+	prudev->dev = device_create(bulk_samp_class, &rpdev->dev, prudev->devt,
+				    NULL, "bulk_samp%d", rpdev->dst);
 	if (IS_ERR(prudev->dev)) {
-		dev_err(&rpdev->dev, "Unable to create the rpmsg_pru device\n");
+		dev_err(&rpdev->dev, "Unable to create the bulk_samp device\n");
 		ret = PTR_ERR(prudev->dev);
 		goto fail_create_device;
 	}
@@ -273,7 +277,7 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 	ret = kfifo_alloc(&prudev->msg_fifo, MAX_FIFO_MSG * FIFO_MSG_SIZE,
 			  GFP_KERNEL);
 	if (ret) {
-		dev_err(&rpdev->dev, "Unable to allocate fifo for the rpmsg_pru device\n");
+		dev_err(&rpdev->dev, "Unable to allocate fifo for the bulk_samp device\n");
 		goto fail_alloc_fifo;
 	}
 
@@ -285,7 +289,7 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev, 
 				BULK_SAMP_BUFFER_SIZE, &prudev->sample_buffers_phys[i], GFP_KERNEL);
 		if (!prudev->sample_buffers[i]) { 
-			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the rpmsg_pru device\n");
+			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the bulk_samp device\n");
 			goto fail_alloc_buffers;
 		}
         if (rproc_pa_to_da(rp, prudev->sample_buffers_phys[i], &da) == 0) {
@@ -300,7 +304,7 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 
 	dev_set_drvdata(&rpdev->dev, prudev);
 
-	dev_info(&rpdev->dev, "new rpmsg_pru device: /dev/rpmsg_pru%d",
+	dev_info(&rpdev->dev, "new bulk_samp device: /dev/bulk_samp%d",
 		 rpdev->dst);
 
 	ret = rpmsg_send(prudev->rpdev, &buf_msg, sizeof(buf_msg));
@@ -319,20 +323,20 @@ fail_alloc_buffers:
 		}
 	}
 fail_alloc_fifo:
-	device_destroy(rpmsg_pru_class, prudev->devt);
+	device_destroy(bulk_samp_class, prudev->devt);
 fail_create_device:
 	cdev_del(&prudev->cdev);
 fail_add_cdev:
-	mutex_lock(&rpmsg_pru_lock);
-	idr_remove(&rpmsg_pru_minors, minor_got);
-	mutex_unlock(&rpmsg_pru_lock);
+	mutex_lock(&bulk_samp_lock);
+	idr_remove(&bulk_samp_minors, minor_got);
+	mutex_unlock(&bulk_samp_lock);
 fail_alloc_minor:
 	return ret;
 }
 
-static void rpmsg_pru_remove(struct rpmsg_channel *rpdev)
+static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 {
-	struct rpmsg_pru_dev *prudev;
+	struct bulk_samp_dev *prudev;
     int i;
 
 	prudev = dev_get_drvdata(&rpdev->dev);
@@ -342,11 +346,11 @@ static void rpmsg_pru_remove(struct rpmsg_channel *rpdev)
                 prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
 	}
 	kfifo_free(&prudev->msg_fifo);
-	device_destroy(rpmsg_pru_class, prudev->devt);
+	device_destroy(bulk_samp_class, prudev->devt);
 	cdev_del(&prudev->cdev);
-	mutex_lock(&rpmsg_pru_lock);
-	idr_remove(&rpmsg_pru_minors, MINOR(prudev->devt));
-	mutex_unlock(&rpmsg_pru_lock);
+	mutex_lock(&bulk_samp_lock);
+	idr_remove(&bulk_samp_minors, MINOR(prudev->devt));
+	mutex_unlock(&bulk_samp_lock);
 }
 
 /* .name matches on RPMsg Channels and causes a probe */
@@ -356,34 +360,34 @@ static const struct rpmsg_device_id rpmsg_driver_pru_id_table[] = {
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_pru_id_table);
 
-static struct rpmsg_driver rpmsg_pru_driver = {
+static struct rpmsg_driver bulk_samp_driver = {
 	.drv.name	= KBUILD_MODNAME,
 	.drv.owner	= THIS_MODULE,
 	.id_table	= rpmsg_driver_pru_id_table,
-	.probe		= rpmsg_pru_probe,
-	.callback	= rpmsg_pru_cb,
-	.remove		= rpmsg_pru_remove,
+	.probe		= bulk_samp_probe,
+	.callback	= bulk_samp_cb,
+	.remove		= bulk_samp_remove,
 };
 
-static int __init rpmsg_pru_init(void)
+static int __init bulk_samp_init(void)
 {
 	int ret;
 
-	rpmsg_pru_class = class_create(THIS_MODULE, "rpmsg_pru");
-	if (IS_ERR(rpmsg_pru_class)) {
+	bulk_samp_class = class_create(THIS_MODULE, "bulk_samp");
+	if (IS_ERR(bulk_samp_class)) {
 		pr_err("Unable to create class\n");
-		ret = PTR_ERR(rpmsg_pru_class);
+		ret = PTR_ERR(bulk_samp_class);
 		goto fail_create_class;
 	}
 
-	ret = alloc_chrdev_region(&rpmsg_pru_devt, 0, PRU_MAX_DEVICES,
-				  "rpmsg_pru");
+	ret = alloc_chrdev_region(&bulk_samp_devt, 0, PRU_MAX_DEVICES,
+				  "bulk_samp");
 	if (ret) {
 		pr_err("Unable to allocate chrdev region\n");
 		goto fail_alloc_region;
 	}
 
-	ret = register_rpmsg_driver(&rpmsg_pru_driver);
+	ret = register_rpmsg_driver(&bulk_samp_driver);
 	if (ret) {
 		pr_err("Unable to register rpmsg driver");
 		goto fail_register_rpmsg_driver;
@@ -392,24 +396,24 @@ static int __init rpmsg_pru_init(void)
 	return 0;
 
 fail_register_rpmsg_driver:
-	unregister_chrdev_region(rpmsg_pru_devt, PRU_MAX_DEVICES);
+	unregister_chrdev_region(bulk_samp_devt, PRU_MAX_DEVICES);
 fail_alloc_region:
-	class_destroy(rpmsg_pru_class);
+	class_destroy(bulk_samp_class);
 fail_create_class:
 	return ret;
 }
 
-static void __exit rpmsg_pru_exit(void)
+static void __exit bulk_samp_exit(void)
 {
-	unregister_rpmsg_driver(&rpmsg_pru_driver);
-	idr_destroy(&rpmsg_pru_minors);
-	mutex_destroy(&rpmsg_pru_lock);
-	class_destroy(rpmsg_pru_class);
-	unregister_chrdev_region(rpmsg_pru_devt, PRU_MAX_DEVICES);
+	unregister_rpmsg_driver(&bulk_samp_driver);
+	idr_destroy(&bulk_samp_minors);
+	mutex_destroy(&bulk_samp_lock);
+	class_destroy(bulk_samp_class);
+	unregister_chrdev_region(bulk_samp_devt, PRU_MAX_DEVICES);
 }
 
-module_init(rpmsg_pru_init);
-module_exit(rpmsg_pru_exit);
+module_init(bulk_samp_init);
+module_exit(bulk_samp_exit);
 
 MODULE_AUTHOR("Jason Reeder <jreeder@ti.com>");
 MODULE_ALIAS("rpmsg:rpmsg-pru");
