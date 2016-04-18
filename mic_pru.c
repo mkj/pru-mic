@@ -26,12 +26,16 @@
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
 #include <linux/poll.h>
+#include <linux/dma-mapping.h>
 
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
 #define RPMSG_BUF_SIZE				(512)
 #define MAX_FIFO_MSG				(32)
 #define FIFO_MSG_SIZE				RPMSG_BUF_SIZE
+
+#define NUM_SAMPLE_BUFFERS          (2)
+#define SAMPLE_BUFFER_SIZE          (4*1024*1024)
 
 /**
  * struct rpmsg_pru_dev - Structure that contains the per-device data
@@ -63,6 +67,8 @@ struct rpmsg_pru_dev {
 	int msg_idx_rd;
 	int msg_idx_wr;
 	wait_queue_head_t wait_list;
+	void* sample_buffers[NUM_SAMPLE_BUFFERS];
+	dma_addr_t sample_buffers_phys[NUM_SAMPLE_BUFFERS];
 };
 
 static struct class *rpmsg_pru_class;
@@ -211,6 +217,7 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 	int ret;
 	struct rpmsg_pru_dev *prudev;
 	int minor_got;
+    int i;
 
 	prudev = devm_kzalloc(&rpdev->dev, sizeof(*prudev), GFP_KERNEL);
 	if (!prudev)
@@ -254,6 +261,15 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 		goto fail_alloc_fifo;
 	}
 
+	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
+		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev, 
+				SAMPLE_BUFFER_SIZE, &prudev->sample_buffers_phys[i], GFP_KERNEL);
+		if (!prudev->sample_buffers[i]) { 
+			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the rpmsg_pru device\n");
+			goto fail_alloc_buffers;
+		}
+	}
+
 	init_waitqueue_head(&prudev->wait_list);
 
 	dev_set_drvdata(&rpdev->dev, prudev);
@@ -263,6 +279,14 @@ static int rpmsg_pru_probe(struct rpmsg_channel *rpdev)
 
 	return 0;
 
+fail_alloc_buffers:
+	kfifo_free(&prudev->msg_fifo);
+	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
+		if (prudev->sample_buffers[i]) {
+			dma_free_coherent(prudev->dev, SAMPLE_BUFFER_SIZE, 
+                    prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
+		}
+	}
 fail_alloc_fifo:
 	device_destroy(rpmsg_pru_class, prudev->devt);
 fail_create_device:
@@ -278,9 +302,14 @@ fail_alloc_minor:
 static void rpmsg_pru_remove(struct rpmsg_channel *rpdev)
 {
 	struct rpmsg_pru_dev *prudev;
+    int i;
 
 	prudev = dev_get_drvdata(&rpdev->dev);
 
+	for (i = 0; i < NUM_SAMPLE_BUFFERS; i++) {
+        dma_free_coherent(prudev->dev, SAMPLE_BUFFER_SIZE, 
+                prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
+	}
 	kfifo_free(&prudev->msg_fifo);
 	device_destroy(rpmsg_pru_class, prudev->devt);
 	cdev_del(&prudev->cdev);
