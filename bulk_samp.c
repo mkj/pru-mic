@@ -141,6 +141,7 @@ static ssize_t bulk_samp_read(struct file *filp, char __user *buf,
         prudev->read_idx++;
         prudev->read_idx %= BULK_SAMP_NUM_BUFFERS;
         prudev->read_off = 0;
+        smp_wmb();
     }
 
 	return ret ? ret : length;
@@ -188,6 +189,7 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 
     prudev->write_idx++;
     prudev->write_idx %= BULK_SAMP_NUM_BUFFERS;
+    smp_wmb();
 
 	wake_up_interruptible(&prudev->wait_list);
 }
@@ -345,7 +347,7 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 
 /* .name matches on RPMsg Channels and causes a probe */
 static const struct rpmsg_device_id rpmsg_driver_pru_id_table[] = {
-	{ .name	= "rpmsg-pru" },
+	{ .name	= "bulk-samp" },
 	{ },
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_pru_id_table);
@@ -406,6 +408,5 @@ module_init(bulk_samp_init);
 module_exit(bulk_samp_exit);
 
 MODULE_AUTHOR("Jason Reeder <jreeder@ti.com>");
-MODULE_ALIAS("rpmsg:rpmsg-pru");
 MODULE_DESCRIPTION("PRU Remote Processor Messaging Driver");
 MODULE_LICENSE("GPL v2");
