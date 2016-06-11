@@ -1,0 +1,4 @@
+200mhz clock (5ns), 4mhz sample -> 50 cycles/sample
+split rising/falling edge.
+40ns wait for data assertion
+http://circuitco.com/support/index.php?title=Weather_Cape_Work-Around
