@@ -1,4 +1,25 @@
-200mhz clock (5ns), 4mhz sample -> 50 cycles/sample
-split rising/falling edge.
-40ns wait for data assertion
+realtime core (pru0)
+    assume 8 inputs.
+	200mhz clock (5ns), 4mhz sample -> 50 cycles/sample, 250ns
+	- split rising/falling edge. need 4x GPI, 1x GPO.
+	 - the sampling will be half cycle out of phase, that's about 1% at 80khz/4mhz?
+	   equiv to 42 micron movement? who cares?
+	40ns wait for data assertion
+	- store 40 bytes worth (?) in a local buffer. That's 40 samples = 2000 cycles = 10us
+	- When local buffer is full should write out to scratchpad
+	buffers, flipflop between two of them. write a flag indicating which
+	buffer is live.
+	- should look for messages from transfer core to stop
+
+transfer core (pru1)
+	wait on message from realtime core. Read both scratch buffers and see which
+	one has data. fill into 512 (?) byte buffer for rpmsg transfer
+	also wait on message from arm for stop/start/config.
+
+processing:
+	pru should be capable of doing some preprocessing.
+	for example simple summation, 32 samples -> 5 bits.
+
+
+disable hdmi:
 http://circuitco.com/support/index.php?title=Weather_Cape_Work-Around

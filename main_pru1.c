@@ -41,15 +41,19 @@
 #include <sys_mailbox.h>
 #include "resource_table_1.h"
 
-volatile register uint32_t __R31;
+#include "bulk_samp_common.h"
+#include "bulk_samp_pru.h"
 
 /* PRU1 is mailbox module user 2 */
-#define MB_USER						2
+#define MB_USER	2
 /* Mbox0 - mail_u2_irq (mailbox interrupt for PRU1) is Int Number 59 */
-#define MB_INT_NUMBER				59
+#define MB_INT_NUMBER 59
 
-/* Host-1 Interrupt sets bit 31 in register R31 */
-#define HOST_INT					0x80000000
+/* pru message bit 30, host int 0 */
+#define PRU_INT (1 << 30)
+
+/* Host-1 Interrupt sets bit 31 in register R31, host int 1 */
+#define ARM_INT (1 << 31)
 
 /* The mailboxes used for RPMsg are defined in the Linux device tree
  * PRU0 uses mailboxes 2 (From ARM) and 3 (To ARM)
@@ -66,9 +70,10 @@ volatile register uint32_t __R31;
  * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
  */
 //#define CHAN_NAME					"rpmsg-client-sample"
-#define CHAN_NAME					"rpmsg-pru"
+#define CHAN_NAME					"bulksamp-pru"
 
-#define CHAN_DESC					"Channel 31"
+/* XXX give a nice name */
+#define CHAN_DESC					"bulksamp PRU input interface"
 #define CHAN_PORT					31
 
 /* 
@@ -80,14 +85,102 @@ volatile register uint32_t __R31;
 #define PAYLOAD_SIZE (RPMSG_BUF_SIZE-16)
 uint8_t payload[PAYLOAD_SIZE];
 
-/*
- * main.c
- */
-void main() {
-	struct pru_rpmsg_transport transport;
-	uint16_t src, dst, len;
-	volatile uint8_t *status;
+/* Sample payload and position */
+int out_pos = 0;
+uint8_t out_payload[PAYLOAD_SIZE];
 
+struct pru_rpmsg_transport transport;
+uint16_t src, dst;
+
+/* Receive samples from the other PRU, fill buffer and send to the 
+ARM host if ready */
+void grab_samples()
+{
+	bufferData regbuf;
+	/* XFR registers R5-R10 from PRU0 to PRU1 */
+	/* 14 is the device_id that signifies a PRU to PRU transfer */
+	__xin(14, 5, 0, regbuf);
+
+	/* Copy into payload */
+	*((bufferData*)out_payload[pos]) = regbuf;
+	out_pos += sizeof(bufferData);
+
+	/* XXX - do we need to flip between buffers while waiting for send?? */
+	if (sizeof(out_payload) - pos < sizeof(bufferData)) {
+		pru_rpmsg_send(&transport, dst, src, out_payload, PAYLOAD_SIZE);
+		out_pos = 0;
+	}
+}
+
+void msg_pru0(int message) {
+	/* 
+	- Write to shared memory
+	- trigger interrupt
+	*/
+}
+
+
+/* Handle control messages from the arm host */
+void handle_rpmsg() 
+{
+	uint16_t len;
+	/* Clear the mailbox interrupt */
+	CT_MBX.IRQ[MB_USER].STATUS_CLR |= 1 << (MB_FROM_ARM_HOST * 2);
+	/* Clear the event status, event MB_INT_NUMBER corresponds to the mailbox interrupt */
+	CT_INTC.SICR_bit.STS_CLR_IDX = MB_INT_NUMBER;
+	/* Use a while loop to read all of the current messages in the mailbox */
+	while(CT_MBX.MSGSTATUS_bit[MB_FROM_ARM_HOST].NBOFMSG > 0)
+	{
+		/* Check to see if the message corresponds to a receive event for the PRU */
+		if (CT_MBX.MESSAGE[MB_FROM_ARM_HOST] == 1)
+		{
+			/* Receive the message */
+			if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS)
+			{
+				if (len > 0)
+				{
+					switch (payload[0])
+					{
+						case BULKSAMP_MSG_START:
+						{
+							going = 1;
+							/* Turn on the other pru */
+						}
+						break;
+						case BULKSAMP_MSG_STOP:
+						{
+							going = 0;
+							/* Turn off the other pru */
+						}
+						break;
+						default:
+					}
+				}
+			}
+		}
+	}
+}
+
+void setup_pru_comm()
+{
+	/* Set up PRU0->PRU1 interrupts */
+	/* Map event 16 (PRU0_PRU1_EVT) to channel 1 */
+	CT_INTC.CMR4_bit.CH_MAP_16 = 1;
+	/* Map channel 1 to host 1 */
+	CT_INTC.HMR0_bit.HINT_MAP_1 = 1;
+	/* Ensure event 16 is cleared */
+	CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_EVT;
+	/* Enable event 16 */
+	CT_INTC.EISR_bit.EN_SET_IDX = PRU0_PRU1_EVT;
+	/* Enable Host interrupt 1 */
+	CT_INTC.HIEISR |= (1 << 0);
+	/* Globally enable host interrupts */
+	CT_INTC.GER = 1;
+}
+
+void setup_rpmsg()
+{
+	volatile uint8_t *status;
 	/* allow OCP master port access by the PRU so the PRU can read external memories */
 	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
@@ -106,65 +199,37 @@ void main() {
 	pru_virtqueue_init(&transport.virtqueue1, &resourceTable.rpmsg_vring1, &CT_MBX.MESSAGE[MB_TO_ARM_HOST], &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
 
 	/* Create the RPMsg channel between the PRU and ARM user space using the transport structure. */
-	while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC, CHAN_PORT) != PRU_RPMSG_SUCCESS);
-	while(1){
-	//	pru_rpmsg_send(&transport, dst, src, payload, len);
+	while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC, CHAN_PORT) != PRU_RPMSG_SUCCESS)
+	{
+		/* Try again */
+	}
+}
 
-#if 1
-		/* Check bit 31 of register R31 to see if the mailbox interrupt has occurred */
-		if(__R31 & HOST_INT){
-			/* Clear the mailbox interrupt */
-			CT_MBX.IRQ[MB_USER].STATUS_CLR |= 1 << (MB_FROM_ARM_HOST * 2);
-			/* Clear the event status, event MB_INT_NUMBER corresponds to the mailbox interrupt */
-			CT_INTC.SICR_bit.STS_CLR_IDX = MB_INT_NUMBER;
-			/* Use a while loop to read all of the current messages in the mailbox */
-			while(CT_MBX.MSGSTATUS_bit[MB_FROM_ARM_HOST].NBOFMSG > 0){
-				/* Check to see if the message corresponds to a receive event for the PRU */
-				if(CT_MBX.MESSAGE[MB_FROM_ARM_HOST] == 1){
-					/* Receive the message */
-					if(pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS){
-						/* Echo the message back to the same address from which we just received */
-						//uint16_t* p = (uint16_t*)payload;
-						//p[0] = dst;
-						//p[1] = src;
-						payload[0] = 'O';
-						payload[1] = 'f';
-						payload[2] = '\n';
-						pru_rpmsg_send(&transport, dst, src, payload, 3);
+/*
+ * main.c
+ */
+void main() {
+	int going = 0; /* whether to be sending samples to the arm host */
 
-#define SECS  15
-						uint32_t ticker = 0;
-						uint32_t *tp = (uint32_t*)payload;
-						for (int z = 0; z < PAYLOAD_SIZE; z++)
-						{
-							payload[z] = 'y'; // 0x79
-						}
-#if 0
-						for (int b = 0; b < 500; b++)
-						{
-							pru_rpmsg_send(&transport, dst, src, payload, PAYLOAD_SIZE);
-						}
-#endif
-						for (int b = 0; b < SECS; b++)
-						{
-#define INPUT_CLOCK 4e6
-#define ITERS (INPUT_CLOCK/PAYLOAD_SIZE)
-							for (int m = 0; m < ITERS; m++)
-							{
-								ticker = ticker++;
-								// payload size;
-								*tp = ticker;
-								tp[PAYLOAD_SIZE/4-1] = ticker;
-								pru_rpmsg_send(&transport, dst, src, payload, PAYLOAD_SIZE);
-#define PRU_CLOCK 200e6
-#define CYCLE_DELAY (PRU_CLOCK/ITERS)
-								__delay_cycles(CYCLE_DELAY);
-							}
-						}
-					}
-				}
+	setup_rpmsg();
+	setup_pru_comm();
+
+	while(1)
+	{
+		/* Check for message from the other pru */
+		if(__R31 & PRU_INT) 
+		{
+			/* Clear interrupt */
+			CT_INTC.SICR_bit.STS_CLR_IDX = PRU0_PRU1_EVT;
+			if (going) {
+				grab_samples();
 			}
 		}
-#endif
+
+		/* Check bit 31 of register R31 to see if the mailbox interrupt has occurred */
+		if(__R31 & ARM_INT) 
+		{
+			handle_rpmsg();
+		}
 	}
 }
