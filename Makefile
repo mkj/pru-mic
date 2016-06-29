@@ -29,11 +29,10 @@ CFLAGS=-v3 -O2 --display_error_number --endian=little --hardware_mac=on --obj_di
 #Linker flags (Defined in 'PRU Optimizing C/C++ Compiler User's Guide)
 LFLAGS=--reread_libs --warn_sections --stack_size=$(STACK_SIZE) --heap_size=$(HEAP_SIZE)
 
-TARGET=$(GEN_DIR)/$(PROJ_NAME).out
 MAP=$(GEN_DIR)/$(PROJ_NAME).map
-SOURCES=$(wildcard *.c)
 #Using .object instead of .obj in order to not conflict with the CCS build process
-OBJECTS=$(patsubst %,$(GEN_DIR)/%,$(SOURCES:.c=.object))
+
+TARGET=$(GEN_DIR)/main_pru1.out $(GEN_DIR)/main_pru0.out
 
 all: printStart $(TARGET) printEnd
 
@@ -49,11 +48,11 @@ printEnd:
 	@echo ''
 
 # Invokes the linker (-z flag) to make the .out file
-$(TARGET): $(OBJECTS) $(LINKER_COMMAND_FILE)
+$(GEN_DIR)/%.out: $(GEN_DIR)/%.object $(LINKER_COMMAND_FILE)
 	@echo ''
 	@echo 'Building target: $@'
 	@echo 'Invoking: PRU Linker'
-	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $(TARGET) $(OBJECTS) -m$(MAP) $(LINKER_COMMAND_FILE) --library=libc.a $(LIBS)
+	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $@ $^ -m$(MAP) --library=libc.a $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ''
 	@echo 'Output files can be found in the "$(GEN_DIR)" directory'
