@@ -49,9 +49,6 @@
 /* Mbox0 - mail_u2_irq (mailbox interrupt for PRU1) is Int Number 59 */
 #define MB_INT_NUMBER 59
 
-/* pru message bit 30, host int 0 */
-#define PRU_INT (1 << 30)
-
 /* Host-1 Interrupt sets bit 31 in register R31, host int 1 */
 #define ARM_INT (1 << 31)
 
@@ -70,11 +67,11 @@
  * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
  */
 //#define CHAN_NAME					"rpmsg-client-sample"
-#define CHAN_NAME					"bulksamp-pru"
+#define RPMSG_CHAN_NAME					"bulksamp-pru"
 
 /* XXX give a nice name */
-#define CHAN_DESC					"bulksamp PRU input interface"
-#define CHAN_PORT					31
+#define RPMSG_CHAN_DESC					"bulksamp PRU input interface"
+#define RPMSG_CHAN_PORT					31
 
 /* 
  * Used to make sure the Linux drivers are ready for RPMsg communication
@@ -86,11 +83,13 @@
 uint8_t payload[PAYLOAD_SIZE];
 
 /* Sample payload and position */
-int out_pos = 0;
+static int out_pos = 0;
 uint8_t out_payload[PAYLOAD_SIZE];
 
 struct pru_rpmsg_transport transport;
 uint16_t src, dst;
+
+char going;
 
 /* Receive samples from the other PRU, fill buffer and send to the 
 ARM host if ready */
@@ -99,24 +98,25 @@ void grab_samples()
 	bufferData regbuf;
 	/* XFR registers R5-R10 from PRU0 to PRU1 */
 	/* 14 is the device_id that signifies a PRU to PRU transfer */
-	__xin(14, 5, 0, regbuf);
+	__xin(14, XFER_SIZE, 0, regbuf);
 
 	/* Copy into payload */
-	*((bufferData*)out_payload[pos]) = regbuf;
+	*((bufferData*)&out_payload[out_pos]) = regbuf;
 	out_pos += sizeof(bufferData);
 
-	/* XXX - do we need to flip between buffers while waiting for send?? */
-	if (sizeof(out_payload) - pos < sizeof(bufferData)) {
-		pru_rpmsg_send(&transport, dst, src, out_payload, PAYLOAD_SIZE);
+	/* Buffer is full, send it */
+	if (sizeof(out_payload) - out_pos < sizeof(bufferData)) {
+		pru_rpmsg_send(&transport, dst, src, out_payload, out_pos);
 		out_pos = 0;
 	}
 }
 
-void msg_pru0(int message) {
-	/* 
-	- Write to shared memory
-	- trigger interrupt
-	*/
+void poke_pru0(char msg, int value)
+{
+	pru_sharedmem->pru0_msg = msg;
+	pru_sharedmem->pru0_val = value;
+
+	PRU1_PRU0_TRIGGER;
 }
 
 
@@ -141,19 +141,21 @@ void handle_rpmsg()
 				{
 					switch (payload[0])
 					{
-						case BULKSAMP_MSG_START:
+						case BULK_SAMP_MSG_START:
 						{
 							going = 1;
+							poke_pru0(BULK_SAMP_MSG_START, 1);
 							/* Turn on the other pru */
 						}
 						break;
-						case BULKSAMP_MSG_STOP:
+						case BULK_SAMP_MSG_STOP:
 						{
 							going = 0;
-							/* Turn off the other pru */
+							poke_pru0(BULK_SAMP_MSG_STOP, 1);
+							/* Discard output */
+							out_pos = 0;
 						}
 						break;
-						default:
 					}
 				}
 			}
@@ -199,7 +201,7 @@ void setup_rpmsg()
 	pru_virtqueue_init(&transport.virtqueue1, &resourceTable.rpmsg_vring1, &CT_MBX.MESSAGE[MB_TO_ARM_HOST], &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
 
 	/* Create the RPMsg channel between the PRU and ARM user space using the transport structure. */
-	while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_DESC, CHAN_PORT) != PRU_RPMSG_SUCCESS)
+	while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, RPMSG_CHAN_NAME, RPMSG_CHAN_DESC, RPMSG_CHAN_PORT) != PRU_RPMSG_SUCCESS)
 	{
 		/* Try again */
 	}
@@ -209,7 +211,7 @@ void setup_rpmsg()
  * main.c
  */
 void main() {
-	int going = 0; /* whether to be sending samples to the arm host */
+	going = 0; /* whether to be sending samples to the arm host */
 
 	setup_rpmsg();
 	setup_pru_comm();
