@@ -50,7 +50,7 @@
 #define MB_INT_NUMBER 59
 
 /* Host-1 Interrupt sets bit 31 in register R31, host int 1 */
-#define ARM_INT (1 << 31)
+#define ARM_INT ((uint32_t)(1 << 31))
 
 /* The mailboxes used for RPMsg are defined in the Linux device tree
  * PRU0 uses mailboxes 2 (From ARM) and 3 (To ARM)

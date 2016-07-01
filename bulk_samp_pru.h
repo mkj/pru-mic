@@ -1,6 +1,11 @@
 #ifndef BULK_SAMP_PRU_H
 #define BULK_SAMP_PRU_H
 
+
+// from waitcycle.asm
+void newcycle();
+void waitcycle(uint32_t until);
+
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
 
@@ -41,7 +46,7 @@ struct bulk_samp_shared {
 	int pru1_val;
 };
 
-struct bulk_samp_shared *pru_sharedmem = (struct bulk_samp_shared*)((void*)DPRAM_SHARED);
+volatile struct bulk_samp_shared *pru_sharedmem = (struct bulk_samp_shared*)((void*)DPRAM_SHARED);
 
 
 #endif /* BULK_SAMP_PRU_H */

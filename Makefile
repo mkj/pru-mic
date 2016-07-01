@@ -16,11 +16,11 @@ HEAP_SIZE=0x100
 GEN_DIR=gen
 
 #Common compiler and linker flags (Defined in 'PRU Optimizing C/C++ Compiler User's Guide)
-CFLAGS=-v3 -O4 --display_error_number --endian=little --hardware_mac=on --obj_directory=$(GEN_DIR) --pp_directory=$(GEN_DIR) --asm_directory=$(GEN_DIR) -ppd -ppa --c99
+CFLAGS=-v3 --display_error_number --endian=little --hardware_mac=on --obj_directory=$(GEN_DIR) --pp_directory=$(GEN_DIR) --asm_directory=$(GEN_DIR) -ppd -ppa --c99
 # generate interleaved assembly output
-CFLAGS += -k 
-# speed vs size
-CFLAGS += -mf5
+CFLAGS += -k  --symdebug:none
+# speed vs size. Don't go higher than -O2 since that involves link time optimisation etc.
+CFLAGS += -mf5 -O0
 #Linker flags (Defined in 'PRU Optimizing C/C++ Compiler User's Guide)
 LFLAGS=--reread_libs --warn_sections --stack_size=$(STACK_SIZE) --heap_size=$(HEAP_SIZE)
 
@@ -28,6 +28,7 @@ MAP=$(GEN_DIR)/$(PROJ_NAME).map
 #Using .object instead of .obj in order to not conflict with the CCS build process
 
 TARGET=$(GEN_DIR)/main_pru1.out $(GEN_DIR)/main_pru0.out
+COMMON_OBJECTS = $(GEN_DIR)/waitcycle.object
 
 all: printStart $(TARGET) printEnd
 
@@ -43,7 +44,7 @@ printEnd:
 	@echo ''
 
 # Invokes the linker (-z flag) to make the .out file
-$(GEN_DIR)/%.out: $(GEN_DIR)/%.object $(LINKER_COMMAND_FILE)
+$(GEN_DIR)/%.out: $(GEN_DIR)/%.object $(LINKER_COMMAND_FILE) $(COMMON_OBJECTS)
 	@echo ''
 	@echo 'Building target: $@'
 	@echo 'Invoking: PRU Linker'
@@ -58,6 +59,9 @@ $(GEN_DIR)/%.object: %.c
 	@echo ''
 	@echo 'Building file: $<'
 	@echo 'Invoking: PRU Compiler'
+	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
+
+$(GEN_DIR)/%.object: %.asm
 	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
 
 .PHONY: all clean
