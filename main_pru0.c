@@ -54,48 +54,6 @@ void handle_pru_msg()
 #define PIN_MASK 0xf
 #define CLOCK_OUT (1<<3)
 
-/* This should only be accessed from assembly */
-//uint32_t cyclestart;
-
-#if 0
-static void newcycle()
-{
-	/* 
-	cyclestart = PRU0_CTRL.CYCLE - 3;
-	*/
-	asm(
-"        LDI32     r0, 0x0002200c        \n"
-"        LDI       r1, ||cyclestart||    \n"
-"        LBBO      &r0, r0, 0, 4         \n"
-"        SUB       r0, r0, 0x02          \n"
-"        SBBO      &r0, r1, 0, 4         \n"
-    );
-}
-
-static void waitcycle(uint32_t until)
-{
-	/* something like:
-	uint32_t now = PRU0_CTRL.CYCLE;
-	uint32_t delay = (cyclestart + until) - now;
-	while (delay--) 
-	{
-	}
-	*/
-
-	asm(
-"        LDI32     r0, 0x0002200c        \n"
-"        LBBO      &r1, r0, 0, 4         \n"
-"        LDI       r0, ||cyclestart||    \n"
-"        LBBO      &r0, r0, 0, 4         \n"
-"        ADD       r0, r0, r14           \n"
-"        RSB       r0, r1, r0            \n"
-"        SUB       r0, r0, 0x01          \n"
-"||$dl||: \n"
-"        QBNE      ||$dl||, r0, 0x00\n"
-	);
-}
-#endif
-
 void main() 
 {
 	while (1)
@@ -104,22 +62,32 @@ void main()
 		{
 			handle_pru_msg();
 		}
-		char pos = 0;
+		uint32_t pos = 0;
+		uint32_t val;
 		bufferData regbuf;
 		while (going)
 		{
-			newcycle(); // cycle 0
-			// clock high
+			newcycle();
+			// cycle 0
+			// clock high 
 			__R30 |= CLOCK_OUT; 
 			__delay_cycles(8); // 40ns delay for data assert. 
-			regbuf.dat[pos] = __R31 & PIN_MASK; 
+#ifdef TEST_CLOCK_OUT
+			val = PRU0_CTRL.CYCLE & 0xf;
+#else
+			val = __R31 & PIN_MASK; 
+#endif
 			waitcycle(25);
-
+            // cycle 25
 			// clock low
 			__R30 &= ~CLOCK_OUT;
 			__delay_cycles(8); // 40ns delay for data assert. 
-			regbuf.dat[pos] |= ((__R31 & PIN_MASK) << 4) ^ 0xf0; // +7 = 42
-
+#ifdef TEST_CLOCK_OUT
+			val |= ((PRU0_CTRL.CYCLE & 0xf) << 4);
+#else
+			val |= ((__R31 & PIN_MASK) << 4);
+#endif
+			regbuf.dat[pos] = val;
 			pos++;
 			if (pos == XFER_SIZE) 
 			{
