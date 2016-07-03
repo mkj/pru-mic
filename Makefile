@@ -20,15 +20,19 @@ CFLAGS=-v3 --display_error_number --endian=little --hardware_mac=on --obj_direct
 # generate interleaved assembly output
 CFLAGS += -k  --symdebug:none
 # speed vs size. Don't go higher than -O2 since that involves link time optimisation etc.
-CFLAGS += -mf5 -O0
+CFLAGS += -mf5 -O4
 #Linker flags (Defined in 'PRU Optimizing C/C++ Compiler User's Guide)
 LFLAGS=--reread_libs --warn_sections --stack_size=$(STACK_SIZE) --heap_size=$(HEAP_SIZE)
+
+ifdef TEST
+CFLAGS += -DTEST_CLOCK_OUT
+endif
 
 MAP=$(GEN_DIR)/$(PROJ_NAME).map
 #Using .object instead of .obj in order to not conflict with the CCS build process
 
 TARGET=$(GEN_DIR)/main_pru1.out $(GEN_DIR)/main_pru0.out
-COMMON_OBJECTS = $(GEN_DIR)/waitcycle.object
+COMMON_OBJECTS = $(GEN_DIR)/waitcycle.object $(GEN_DIR)/asmpr0.object
 
 all: printStart $(TARGET) printEnd
 

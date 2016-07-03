@@ -30,6 +30,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+ 
+// Matt Johnston <matt@ucc.asn.au> 2016
 
 #include <stdint.h>
 #include <stdio.h>
@@ -118,7 +120,6 @@ void poke_pru0(char msg, int value)
 
 	PRU1_PRU0_TRIGGER;
 }
-
 
 /* Handle control messages from the arm host */
 void handle_rpmsg() 

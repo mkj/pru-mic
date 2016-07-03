@@ -1,33 +1,42 @@
+; Matt Johnston <matt@ucc.asn.au> 2016
+
     .bss     cyclestart,4,4  ; Define the variable
 
 ; from C code
-;   cyclestart = PRU0_CTRL.CYCLE - 3;
 
-	.sect	".text:newcycle"
-	.clink
-	.global	||newcycle||
-||newcycle||
+;       void initcycle() {
+;         cyclestart = PRU0_CTRL.CYCLE - 3;
+;       }
+
+        .sect   ".text:initcycle"
+        .clink
+;       "void initcycle()"
+        .global ||initcycle||
+||initcycle||
         LDI32     r0, 0x0002200c
         LDI       r1, ||cyclestart||
-        LBBO      &r0, r0, 0, 4   ; load CYCLE register - extra delay from here onwards
-        ADD       r0, r0, 4 ; cycle register 4 cycles later when this function returns
-        SBBO      &r0, r1, 0, 4
+        LBBO      &r0, r0, 0, 4   ; load CYCLE register
+        SBBO      &r0, r1, 0, 4   ; save it to cyclestart
         JMP       r3.w2
 
 
 ; from C code something like
-;	uint32_t now = PRU0_CTRL.CYCLE;
-;	uint32_t delay = (cyclestart + until) - now;
-;	while (delay--)  {}
+;       void waitcycle(uint32_t until) {
+;         uint32_t now = PRU0_CTRL.CYCLE;
+;         uint32_t delay = (cyclestart + until) - now;
+;         cyclestart = now;
+;         while (delay--)  {}
+;       }
 
-	.sect	".text:waitcycle"
-	.clink
-	.global	||waitcycle||
+        .sect   ".text:waitcycle"
+        .clink
+        .global ||waitcycle||
 ||waitcycle||
         LDI32     r0, 0x0002200c
         LBBO      &r1, r0, 0, 4   ; load CYCLE register - extra delay from here
-        LDI       r0, ||cyclestart||
-        LBBO      &r0, r0, 0, 4   ; load cyclestart
+        LDI       r16, ||cyclestart||
+        LBBO      &r0, r16, 0, 4   ; load old cyclestart
+        SBBO      &r1, r16, 0, 4   ; store new CYCLE register to cyclestart
         ADD       r0, r0, r14
         RSB       r0, r1, r0      ; delay = (cyclestart + until) - now
         SUB       r0, r0, 10       ; subtract extra delay=10

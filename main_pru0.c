@@ -1,3 +1,4 @@
+// Matt Johnston <matt@ucc.asn.au> 2016
 #include <stdint.h>
 #include <stdio.h>
 #include <pru_cfg.h>
@@ -54,6 +55,8 @@ void handle_pru_msg()
 #define PIN_MASK 0xf
 #define CLOCK_OUT (1<<3)
 
+asm("	.global	||waitcycle||");
+
 void main() 
 {
 	while (1)
@@ -62,40 +65,70 @@ void main()
 		{
 			handle_pru_msg();
 		}
-		uint32_t pos = 0;
-		uint32_t val;
+		uint32_t highval, lowval;
 		bufferData regbuf;
+		uint8_t *p = regbuf.dat;
+		initcycle();
 		while (going)
 		{
-			newcycle();
-			// cycle 0
-			// clock high 
-			__R30 |= CLOCK_OUT; 
-			__delay_cycles(8); // 40ns delay for data assert. 
+			// wait then immediately clock
+			// waitcycle(25); 
+			// __R30 |= CLOCK_OUT;
+			// __delay_cycles(8);
+			asm(
+"        LDI       r14, 0x0019 \n"
+"        JAL       r3.w2, ||waitcycle|| \n"
+"        SET       r30, r30, 0x00000003 \n"
+"        MOV       r0,r0 \n" // 40ns delay/8 cycles
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+);
+
 #ifdef TEST_CLOCK_OUT
-			val = PRU0_CTRL.CYCLE & 0xf;
+#warning 
+#warning > > > > > > > > > > > > > > > > > > > > > > > >
+#warning > > Building with TEST_CLOCK_OUT
+#warning > > > > > > > > > > > > > > > > > > > > > > > >
+#warning 
+			lowval = (PRU0_CTRL.CYCLE & 0xf) << 4;
 #else
-			val = __R31 & PIN_MASK; 
+			lowval = (__R31 & PIN_MASK) << 4;
 #endif
-			waitcycle(25);
-            // cycle 25
-			// clock low
-			__R30 &= ~CLOCK_OUT;
-			__delay_cycles(8); // 40ns delay for data assert. 
+			asm(
+"	.global	||waitcycle|| \n"
+"        LDI       r14, 0x0019 \n"
+"        JAL       r3.w2, ||waitcycle|| \n"
+"        SET       r30, r30, 0x00000003 \n"
+"        MOV       r0,r0 \n" // 40ns delay/8 cycles
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+"        MOV       r0,r0 \n"
+);
 #ifdef TEST_CLOCK_OUT
-			val |= ((PRU0_CTRL.CYCLE & 0xf) << 4);
+			highval = PRU0_CTRL.CYCLE & 0xf
+			//val |= ((PRU0_CTRL.CYCLE & 0xf) << 4);
 #else
-			val |= ((__R31 & PIN_MASK) << 4);
+			highval = __R31 & PIN_MASK;
+			//val |= ((__R31 & PIN_MASK) << 4);
 #endif
-			regbuf.dat[pos] = val;
-			pos++;
-			if (pos == XFER_SIZE) 
+			//regbuf.dat[pos] = lowval | (highval<<4);
+			*p = lowval | highval;
+			p++;
+			if (p == (regbuf.dat + XFER_SIZE)) 
 			{
 				PRU0_PRU1_TRIGGER;
-				__xin(14, XFER_SIZE, 0, regbuf);
-				pos = 0;
+				__xout(14, XFER_SIZE, 0, regbuf);
+				p = regbuf.dat;
 			}
-			waitcycle(50 - 3 - 2); // 50 cycles - 3 for this call - 2 for while loop
 		}
 	}
 }

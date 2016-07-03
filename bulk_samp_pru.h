@@ -1,9 +1,10 @@
 #ifndef BULK_SAMP_PRU_H
 #define BULK_SAMP_PRU_H
 
+// Matt Johnston <matt@ucc.asn.au> 2016
 
 // from waitcycle.asm
-void newcycle();
+void initcycle();
 void waitcycle(uint32_t until);
 
 volatile register uint32_t __R31;
