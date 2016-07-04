@@ -33,7 +33,7 @@
 #include <linux/remoteproc.h>
 #include <linux/string.h>
 
-#include "../bulk_samp.h"
+#include "../bulk_samp_common.h"
 
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
@@ -89,6 +89,7 @@ static int bulk_samp_is_full(struct bulk_samp_dev *d) {
 
 static int bulk_samp_open(struct inode *inode, struct file *filp)
 {
+    struct bulk_samp_msg_start msg = { .type = BULK_SAMP_MSG_START };
 	struct bulk_samp_dev *prudev;
 	int ret = -EACCES;
 
@@ -97,7 +98,6 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 	mutex_lock(&bulk_samp_lock);
 	if (!prudev->locked) {
 		prudev->locked = true;
-		prudev->warned_full = false;
 		filp->private_data = prudev;
 		ret = 0;
 	}
@@ -106,14 +106,29 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 	if (ret)
 		dev_err(prudev->dev, "Device already open\n");
 
+    prudev->warned_full = false;
+
+	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
+	if (ret) {
+		dev_err(prudev->dev, "rpmsg_send start failed: %d\n", ret);
+    }
+
 	return ret;
 }
 
 static int bulk_samp_release(struct inode *inode, struct file *filp)
 {
+    struct bulk_samp_msg_stop msg = { .type = BULK_SAMP_MSG_STOP };
 	struct bulk_samp_dev *prudev;
+    int ret;
 
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
+
+	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
+	if (ret) {
+		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
+    }
+
 	mutex_lock(&bulk_samp_lock);
 	prudev->locked = false;
 	mutex_unlock(&bulk_samp_lock);
