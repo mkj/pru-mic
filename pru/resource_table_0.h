@@ -69,8 +69,6 @@
 /* Mapping sysevts to a channel. Each pair contains a sysevt, channel
  * */
 struct ch_map pru_intc_map[] = { 
- /* Event 59 (Mbox1 mailbox interrupt for pru1) to channel 1 */
-	{59, 1},
  /* Event 17 to channel 0 */
 	{17, 0},
 };

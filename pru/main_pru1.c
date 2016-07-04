@@ -117,7 +117,7 @@ void grab_samples()
 	out_pos += sizeof(bufferData);
 
 	/* Buffer is full, send it */
-	if (sizeof(out_payload) - out_pos < XFER_SIZE) {
+	if (BULK_SAMP_BUFFER_SIZE - out_pos < XFER_SIZE) {
 		struct bulk_samp_msg_ready *m = (void*)out_payload;
 		m->type = BULK_SAMP_MSG_READY;
 		m->buffer_index = out_index;
