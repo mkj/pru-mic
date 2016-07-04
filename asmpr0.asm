@@ -1,31 +1,29 @@
-    .global     ||going||
-
-    .bss     samplebuf,40  ; Define the variable
-
         .sect   ".text:sampleloop"
         .clink
 ;       "void sampleloop()"
         .global ||sampleloop||
 
 ||sampleloop||
-        LDI       r14, ||going||   ; going variable address r14
         ldi       r1.b0, &r18.b0 ; base address for samples which are stored in registers r18-r22
         ldi       r1.b1, &r22.b3 ; end address
+
+        ; loop keeps running until an interrupt comes from pru1
+        ; the loop is _exactly_ 50 cycles long, for 4mhz clock cycle
 
 ||$top||
         SET       r30, r30, 0x00000003 ; clock high
         NOP       ; 40ns/8cycle delay for data
         NOP
         NOP
-        LBBO      &r1, r14, 0, 4              ; test for !going
-        QBNE      ||$keepgoing||, r1, 0
-        JMP       r3.w2
+        QBBC      ||$keepgoing||, r31, 0x1e   ; test for PRU_INT (1<<30)
+        JMP       r3.w2 ; return if an interrupt happened
 ||$keepgoing||
         NOP
         NOP
         NOP
-        LSL       r15, r31, 0x1c         ; read gpio
-        LSR       r15, r15, 0x18         ; <<4
+        NOP
+        AND       r15, r31, 0xf     ; read low 4 bits, gpio samples from select-high mics
+        NOP
         NOP
         NOP
         NOP
@@ -50,11 +48,12 @@
         NOP
         NOP
         NOP
-        AND       r16, r31, 0x0f         ; [ALU_PRU] |120| highval
+        AND       r16, r31, 0x0f         ; low 4 bits, gpio samples from select-low mics
+        LSL       r16, r16, 4           ; store in high nibble
         OR        r16, r16, 15
         mvib *r1.b0++, r16     ; store sample in r18-r22 buffer
 
-        qblt ||$noxfer||, r1.b0, r1.b1
+        qble ||$noxfer||, r1.b0, r1.b1
 
         xout 14, &r18, 40              ; transfer r18-r22 to pru1
         LDI       r31, 0x0020          ; wake pru1
@@ -74,7 +73,6 @@
         nop
         nop
         nop
-        nop
-        nop ; 24 cycles
-        jmp ||$top||
+        nop 
+        jmp ||$top|| ; 25 cycles
 

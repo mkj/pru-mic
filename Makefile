@@ -32,7 +32,7 @@ MAP=$(GEN_DIR)/$(PROJ_NAME).map
 #Using .object instead of .obj in order to not conflict with the CCS build process
 
 TARGET=$(GEN_DIR)/main_pru1.out $(GEN_DIR)/main_pru0.out
-COMMON_OBJECTS = $(GEN_DIR)/waitcycle.object $(GEN_DIR)/asmpr0.object
+COMMON_OBJECTS = $(GEN_DIR)/asmpr0.object
 
 all: printStart $(TARGET) printEnd
 

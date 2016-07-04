@@ -14,7 +14,7 @@
 #include "bulk_samp_common.h"
 #include "bulk_samp_pru.h"
 
-char going = 1;
+static char going = 1;
 
 void setup_pru_comm()
 {
@@ -51,84 +51,14 @@ void handle_pru_msg()
 	}
 }
 
-// pr1_pru0_pru_r31_0 to pr1_pru0_pru_r31_3
-#define PIN_MASK 0xf
-#define CLOCK_OUT (1<<3)
-
-asm("	.global	||waitcycle||");
-
 void main() 
 {
 	while (1)
 	{
-		if(__R31 & PRU_INT) 
+		if (going)
 		{
-			handle_pru_msg();
+			sampleloop();
 		}
-		uint32_t highval, lowval;
-		bufferData regbuf;
-		uint8_t *p = regbuf.dat;
-		initcycle();
-		while (going)
-		{
-			// wait then immediately clock
-			// waitcycle(25); 
-			// __R30 |= CLOCK_OUT;
-			// __delay_cycles(8);
-			asm(
-"        LDI       r14, 0x0019 \n"
-"        JAL       r3.w2, ||waitcycle|| \n"
-"        SET       r30, r30, 0x00000003 \n"
-"        MOV       r0,r0 \n" // 40ns delay/8 cycles
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-);
-
-#ifdef TEST_CLOCK_OUT
-#warning 
-#warning > > > > > > > > > > > > > > > > > > > > > > > >
-#warning > > Building with TEST_CLOCK_OUT
-#warning > > > > > > > > > > > > > > > > > > > > > > > >
-#warning 
-			lowval = (PRU0_CTRL.CYCLE & 0xf) << 4;
-#else
-			lowval = (__R31 & PIN_MASK) << 4;
-#endif
-			asm(
-"	.global	||waitcycle|| \n"
-"        LDI       r14, 0x0019 \n"
-"        JAL       r3.w2, ||waitcycle|| \n"
-"        SET       r30, r30, 0x00000003 \n"
-"        MOV       r0,r0 \n" // 40ns delay/8 cycles
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-"        MOV       r0,r0 \n"
-);
-#ifdef TEST_CLOCK_OUT
-			highval = PRU0_CTRL.CYCLE & 0xf
-			//val |= ((PRU0_CTRL.CYCLE & 0xf) << 4);
-#else
-			highval = __R31 & PIN_MASK;
-			//val |= ((__R31 & PIN_MASK) << 4);
-#endif
-			//regbuf.dat[pos] = lowval | (highval<<4);
-			*p = lowval | highval;
-			p++;
-			if (p == (regbuf.dat + XFER_SIZE)) 
-			{
-				PRU0_PRU1_TRIGGER;
-				__xout(14, XFER_SIZE, 0, regbuf);
-				p = regbuf.dat;
-			}
-		}
+		handle_pru_msg();
 	}
 }

@@ -85,7 +85,7 @@
 uint8_t payload[PAYLOAD_SIZE];
 
 /* Sample payload and position */
-static int out_pos = 0;
+static int out_pos = 1;
 uint8_t out_payload[PAYLOAD_SIZE];
 
 struct pru_rpmsg_transport transport;
@@ -107,9 +107,10 @@ void grab_samples()
 	out_pos += sizeof(bufferData);
 
 	/* Buffer is full, send it */
-	if (sizeof(out_payload) - out_pos < sizeof(bufferData)) {
+	if (sizeof(out_payload) - out_pos < XFER_SIZE) {
+		out_payload[0] = BULK_SAMP_MSG_DATA;
 		pru_rpmsg_send(&transport, dst, src, out_payload, out_pos);
-		out_pos = 0;
+		out_pos = 1; // allow msg prefix
 	}
 }
 

@@ -13,7 +13,7 @@
 #define BULK_SAMP_MSG_STOP 3
 // XXX pin setup? rising/falling trigger?
 // device to cpu
-#define BULK_SAMP_MSG_READY 20
+#define BULK_SAMP_MSG_DATA 20
 
 struct bulk_samp_msg_buffers {
     char type;
