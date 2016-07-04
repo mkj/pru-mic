@@ -3,9 +3,8 @@
 
 // Matt Johnston <matt@ucc.asn.au> 2016
 
-// from waitcycle.asm
-void initcycle();
-void waitcycle(uint32_t until);
+// from asmpr0.asm
+void sampleloop();
 
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;

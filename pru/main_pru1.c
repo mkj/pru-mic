@@ -43,7 +43,7 @@
 #include <sys_mailbox.h>
 #include "resource_table_1.h"
 
-#include "bulk_samp_common.h"
+#include "../bulk_samp_common.h"
 #include "bulk_samp_pru.h"
 
 /* PRU1 is mailbox module user 2 */
@@ -85,8 +85,12 @@
 uint8_t payload[PAYLOAD_SIZE];
 
 /* Sample payload and position */
-static int out_pos = 1;
-uint8_t out_payload[PAYLOAD_SIZE];
+static uint8_t out_payload[PAYLOAD_SIZE];
+
+
+static uint8_t *out_buffers[BULK_SAMP_NUM_BUFFERS];
+static uint8_t out_index;
+static int out_pos;
 
 struct pru_rpmsg_transport transport;
 uint16_t src, dst;
@@ -102,15 +106,28 @@ void grab_samples()
 	/* 14 is the device_id that signifies a PRU to PRU transfer */
 	__xin(14, XFER_SIZE, 0, regbuf);
 
+	if (!out_buffers[out_index])
+	{
+		// safety
+		return;
+	}
+
 	/* Copy into payload */
-	*((bufferData*)&out_payload[out_pos]) = regbuf;
+	*((bufferData*)&out_buffers[out_index][out_pos]) = regbuf;
 	out_pos += sizeof(bufferData);
 
 	/* Buffer is full, send it */
 	if (sizeof(out_payload) - out_pos < XFER_SIZE) {
-		out_payload[0] = BULK_SAMP_MSG_DATA;
-		pru_rpmsg_send(&transport, dst, src, out_payload, out_pos);
-		out_pos = 1; // allow msg prefix
+		struct bulk_samp_msg_ready *m = (void*)out_payload;
+		m->type = BULK_SAMP_MSG_READY;
+		m->buffer_index = out_index;
+		m->size = out_pos;
+		m->checksum = 0;
+		m->magic = 12349876;
+		pru_rpmsg_send(&transport, dst, src, out_payload, sizeof(struct bulk_samp_msg_ready));
+		// reset buffers
+		out_index = (out_index+1) % BULK_SAMP_NUM_BUFFERS;
+		out_pos = 0;
 	}
 }
 
@@ -146,8 +163,10 @@ void handle_rpmsg()
 						case BULK_SAMP_MSG_START:
 						{
 							going = 1;
-							poke_pru0(BULK_SAMP_MSG_START, 1);
 							/* Turn on the other pru */
+							poke_pru0(BULK_SAMP_MSG_START, 1);
+							out_index = 0;
+							out_pos = 0;
 						}
 						break;
 						case BULK_SAMP_MSG_STOP:
@@ -155,7 +174,16 @@ void handle_rpmsg()
 							going = 0;
 							poke_pru0(BULK_SAMP_MSG_STOP, 1);
 							/* Discard output */
-							out_pos = 0;
+						}
+						break;
+						case BULK_SAMP_MSG_BUFFERS:
+						{
+							struct bulk_samp_msg_buffers *m = (void*)payload;
+							for (int i = 0; i < BULK_SAMP_NUM_BUFFERS; i++)
+							{
+								out_buffers[i] = (void*)m->buffers[i];
+							}
+							out_index = 0;
 						}
 						break;
 					}
@@ -206,6 +234,11 @@ void setup_rpmsg()
 	while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, RPMSG_CHAN_NAME, RPMSG_CHAN_DESC, RPMSG_CHAN_PORT) != PRU_RPMSG_SUCCESS)
 	{
 		/* Try again */
+	}
+
+	for (int i = 0; i < BULK_SAMP_NUM_BUFFERS; i++)
+	{
+		out_buffers[i] = 0;
 	}
 }
 

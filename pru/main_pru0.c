@@ -11,10 +11,10 @@
 
 #include "resource_table_0.h"
 
-#include "bulk_samp_common.h"
+#include "../bulk_samp_common.h"
 #include "bulk_samp_pru.h"
 
-static char going = 1;
+static char going = 0;
 
 void setup_pru_comm()
 {

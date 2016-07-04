@@ -33,7 +33,7 @@
 #include <linux/remoteproc.h>
 #include <linux/string.h>
 
-#include "bulk_samp.h"
+#include "../bulk_samp.h"
 
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
@@ -63,12 +63,15 @@ struct bulk_samp_dev {
 	bool locked;
 	dev_t devt;
 	wait_queue_head_t wait_list;
+
 	void* sample_buffers[BULK_SAMP_NUM_BUFFERS];
 	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
     // XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
     int read_idx;
     size_t read_off; // index into current sample_buffers[read_idx]
     int write_idx;
+
+    bool warned_full;
 };
 
 static struct class *bulk_samp_class;
@@ -94,6 +97,7 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 	mutex_lock(&bulk_samp_lock);
 	if (!prudev->locked) {
 		prudev->locked = true;
+		prudev->warned_full = false;
 		filp->private_data = prudev;
 		ret = 0;
 	}
@@ -182,12 +186,14 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
     /* XXX handle 'msg' here, validate index etc */
 
 	if (bulk_samp_is_full(prudev)) {
-		dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
+		if (!prudev->warned_full) {
+			dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
+			prudev->warned_full = false;
+		}
 		return;
 	}
 
-    prudev->write_idx++;
-    prudev->write_idx %= BULK_SAMP_NUM_BUFFERS;
+    prudev->write_idx = (prudev->write_idx+1) % BULK_SAMP_NUM_BUFFERS;
     smp_wmb();
 
 	wake_up_interruptible(&prudev->wait_list);
@@ -205,7 +211,7 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
     
     type = *(char*)data;
 
-    if (type == BULK_SAMP_MSG_DATA) {
+    if (type == BULK_SAMP_MSG_READY) {
         handle_msg_ready(rpdev, data, len);
     } else {
 		dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
