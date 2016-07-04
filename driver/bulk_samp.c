@@ -181,7 +181,6 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 
     /* XXX handle 'msg' here, validate index etc */
 
-
 	if (bulk_samp_is_full(prudev)) {
 		dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
 		return;
@@ -206,7 +205,7 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
     
     type = *(char*)data;
 
-    if (type == BULK_SAMP_MSG_READY) {
+    if (type == BULK_SAMP_MSG_DATA) {
         handle_msg_ready(rpdev, data, len);
     } else {
 		dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
@@ -347,7 +346,7 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 
 /* .name matches on RPMsg Channels and causes a probe */
 static const struct rpmsg_device_id rpmsg_driver_pru_id_table[] = {
-	{ .name	= "bulk-samp" },
+	{ .name	= "bulksamp-pru" },
 	{ },
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_pru_id_table);
@@ -407,6 +406,7 @@ static void __exit bulk_samp_exit(void)
 module_init(bulk_samp_init);
 module_exit(bulk_samp_exit);
 
+// TODO
 MODULE_AUTHOR("Jason Reeder <jreeder@ti.com>");
 MODULE_DESCRIPTION("PRU Remote Processor Messaging Driver");
 MODULE_LICENSE("GPL v2");
