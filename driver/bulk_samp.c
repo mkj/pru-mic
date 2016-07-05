@@ -255,6 +255,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
     int i;
     struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS };
     struct rproc *rp;
+    struct virtio_device *vdev;
 
     rp = rpdev_to_rproc(rpdev);
 
@@ -293,6 +294,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 
 	prudev->rpdev = rpdev;
 
+    vdev = rpmsg_get_virtio_dev(rpdev);
+
     /* Allocate large buffers for data transfer. */
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
         u64 da;
@@ -307,7 +310,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
         /* clear it to avoid bugs exposing kernel memory */
         memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
 
-        if (rproc_pa_to_da(rp, prudev->sample_buffers_phys[i], &da) == 0) {
+        da = cpu_to_virtio64(vdev, prudev->sample_buffers_phys[i]);
+        if (da) {
             buf_msg.buffers[i] = (uint32_t)da;
         } else {
 			dev_err(&rpdev->dev, "Unable to map physical address %llu to device.\n", (u64)prudev->sample_buffers_phys[i]);
