@@ -17,9 +17,9 @@
         SET       r30, r30, 0x00000003 ; clock high
         NOP       ; 40ns/8cycle delay for data
         NOP
-        NOP
-        QBBC      ||$keepgoing||, r31, 0x1e   ; test for PRU_INT (1<<30)
-        JMP       r3.w2 ; return if an interrupt happened
+        XIN 10, &r27, 4        ;    check r27.b0 for message from pru1
+        QBBC      ||$keepgoing||, r27, 1   
+        JMP       r3.w2 ; return if message pending
 ||$keepgoing||
         NOP
         NOP
@@ -74,13 +74,15 @@
 
         qble ||$noxfer||, r1.b0, r1.b1
 
-        xout 14, &r18, 40              ; transfer r18-r22 to pru1
-        LDI       r31, 0x0020          ; wake pru1
+        xout 10, &r18, 40              ; transfer r18-r22 to bank0
+        ldi r28, 1
+        xout 10, &r28, 4               ; wake up pru1 with a flag in scratchpad register r28
         ldi       r1.b0, &r18.b0 ; reset base address for samples
         jmp ||$donexfer||
 
 ||$noxfer||
-        nop ; 4 nops to match the 4 transfer instructions above
+        nop ; 5 nops to match the 5 transfer instructions above
+        nop
         nop
         nop
         nop
@@ -91,7 +93,5 @@
         nop
         nop
         nop
-        nop
         nop 
         jmp ||$top|| ; 25 cycles
-

@@ -16,8 +16,16 @@
 
 static char going = 0;
 
+static void clear_pru0_msg_flag()
+{
+	uint32_t zero = 0;
+    __xout(10, 27, 0, zero);
+}
+
 void setup_pru_comm()
 {
+	clear_pru0_msg_flag();
+#if 0
 	/* Set up PRU1->PRU0 interrupts */
 	/* Map event 17 (PRU1_PRU0_EVT) to channel 1 */
 	CT_INTC.CMR4_bit.CH_MAP_17 = 1;
@@ -31,11 +39,19 @@ void setup_pru_comm()
 	CT_INTC.HIEISR |= (1 << 0);
 	/* Globally enable host interrupts */
 	CT_INTC.GER = 1;
+#endif
 }
 
 void handle_pru_msg()
 {
-	CT_INTC.SICR_bit.STS_CLR_IDX = PRU1_PRU0_EVT;
+	uint32_t val;
+    __xin(10, 27, 0, val);
+    if (!val) {
+    	return;
+    }
+
+    clear_pru0_msg_flag();
+
 	switch (pru_sharedmem->pru0_msg)
 	{
 		case BULK_SAMP_MSG_START:
