@@ -291,6 +291,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 		goto fail_create_device;
 	}
 
+	prudev->dev->coherent_dma_mask = DMA_BIT_MASK(32);
+
 	prudev->rpdev = rpdev;
 
     /* Allocate large buffers for data transfer. */
@@ -310,7 +312,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
         if (rproc_pa_to_da(rp, prudev->sample_buffers_phys[i], &da) == 0) {
             buf_msg.buffers[i] = (uint32_t)da;
         } else {
-			dev_err(&rpdev->dev, "Unable to map physical address %llu to device.\n", (u64)prudev->sample_buffers_phys[i]);
+			dev_err(&rpdev->dev, "Unable to map physical address %llx to device.\n", (u64)prudev->sample_buffers_phys[i]);
 			goto fail_alloc_buffers;
         }
 	}
