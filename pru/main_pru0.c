@@ -22,9 +22,10 @@ static void clear_pru0_msg_flag()
     __xout(10, 27, 0, zero);
 }
 
-void setup_pru_comm()
+void setup_pru()
 {
 	clear_pru0_msg_flag();
+    PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 #if 0
 	/* Set up PRU1->PRU0 interrupts */
 	/* Map event 17 (PRU1_PRU0_EVT) to channel 1 */

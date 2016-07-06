@@ -71,8 +71,6 @@
 struct ch_map pru_intc_map[] = { 
  /* Event 59 (Mbox1 mailbox interrupt for pru1) to channel 1 */
 	{59, 1},
- /* Event 16 to channel 2 */
-	{16, 2},
 };
 
 struct my_resource_table {
@@ -138,7 +136,7 @@ struct my_resource_table resourceTable = {
 		  /* Channel-to-host mapping, 255 for unused
 		   * 		Mapping Channel-1 to Host-1 (PRU0/1 R31 bit 31)
 		   * */
-		  0, HOST_UNUSED, 1, HOST_UNUSED, HOST_UNUSED,
+		  HOST_UNUSED, 1, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED,
 		  HOST_UNUSED, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED,
 		  /* Number of evts being mapped to channels */
 		  (sizeof(pru_intc_map) / sizeof(struct ch_map)),

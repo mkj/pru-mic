@@ -94,6 +94,8 @@ uint16_t src, dst;
 
 char going = 0;
 
+static void reply_confirm(uint8_t type);
+
 /* Receive samples from the other PRU, fill buffer and send to the 
 ARM host if ready */
 void grab_samples()
@@ -108,11 +110,11 @@ void grab_samples()
     } regbuf; 
     // base address is r18
 #ifdef TEST_CLOCK_OUT
-    regbuf.x0 = PRU0_CTRL.CYCLE;
-    regbuf.x1 = PRU0_CTRL.CYCLE;
-    regbuf.x2 = PRU0_CTRL.CYCLE;
-    regbuf.x3 = PRU0_CTRL.CYCLE;
-    regbuf.x4 = PRU0_CTRL.CYCLE;
+    regbuf.x0 = 'c';
+    regbuf.x1 = 'h';
+    regbuf.x2 = 'a';
+    regbuf.x3 = 'i';
+    regbuf.x4 = 'r';
 #else
     __xin(10, 18, 0, regbuf);
 #endif
@@ -120,15 +122,17 @@ void grab_samples()
     if (!out_buffers[out_index])
     {
         // safety
+        reply_confirm(102);
         return;
     }
+    reply_confirm(101);
 
     /* Copy into payload */
     *((struct _regbuf*)&out_buffers[out_index][out_pos]) = regbuf;
-    out_pos += sizeof(bufferData);
+    out_pos += XFER_SIZE;
 
     /* Buffer is full, send it */
-    if (BULK_SAMP_BUFFER_SIZE - out_pos < XFER_SIZE) {
+    if (out_pos >= BULK_SAMP_BUFFER_SIZE - XFER_SIZE) {
         struct bulk_samp_msg_ready *m = (void*)payload;
         m->type = BULK_SAMP_MSG_READY;
         m->buffer_index = out_index;
@@ -212,6 +216,7 @@ void handle_rpmsg()
                         break;
                     }
                 }
+                reply_confirm(payload[0]);
             }
         }
     }
@@ -223,9 +228,10 @@ static void clear_pru1_msg_flag()
     __xout(10, 28, 0, zero);
 }
 
-void setup_pru_comm()
+static void setup_pru()
 {
     clear_pru1_msg_flag();
+    PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 #if 0
     /* Set up PRU0->PRU1 interrupts */
     /* Map event 16 (PRU0_PRU1_EVT) to channel 1 */
@@ -282,20 +288,17 @@ void main() {
     uint32_t val;
 
     setup_rpmsg();
-    setup_pru_comm();
+    setup_pru();
 
     uint32_t last_sample = PRU0_CTRL.CYCLE;
 
     while(1)
     {
 #ifdef TEST_CLOCK_OUT
-        if (PRU0_CTRL.CYCLE - last_sample > GRAB_SAMPLE_INTERVAL)
+        if (going)
         {
-            last_sample = PRU0_CTRL.CYCLE;
-            if (going)
-            {
-                grab_samples();
-            }
+            __delay_cycles(GRAB_SAMPLE_INTERVAL);
+            grab_samples();
         }
 #else
         __xin(10, 28, 0, val);

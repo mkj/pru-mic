@@ -379,7 +379,7 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 
 /* .name matches on RPMsg Channels and causes a probe */
 static const struct rpmsg_device_id rpmsg_driver_pru_id_table[] = {
-	{ .name	= "bulksamp-pru" },
+	{ .name	= RPMSG_CHAN_NAME },
 	{ },
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_pru_id_table);
