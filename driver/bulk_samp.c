@@ -108,6 +108,7 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 
     prudev->warned_full = false;
 
+    printk("bulk_samp open\n");
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send start failed: %d\n", ret);
@@ -124,6 +125,7 @@ static int bulk_samp_release(struct inode *inode, struct file *filp)
 
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
+    printk("bulk_samp stop\n");
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
@@ -203,7 +205,7 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 	if (bulk_samp_is_full(prudev)) {
 		if (!prudev->warned_full) {
 			dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
-			prudev->warned_full = false;
+			prudev->warned_full = true;
 		}
 		return;
 	}
@@ -212,6 +214,13 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
     smp_wmb();
 
 	wake_up_interruptible(&prudev->wait_list);
+}
+
+static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len) 
+{
+    struct bulk_samp_msg_confirm *msg = data;
+    
+    printk("bulk_samp: got confirm for message type %d\n", (int)msg->confirm_type);
 }
 
 static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
@@ -226,15 +235,16 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
     
     type = *(char*)data;
 
-    if (type == BULK_SAMP_MSG_READY) {
-        handle_msg_ready(rpdev, data, len);
-    if (type == BULK_SAMP_MSG_CONFIRM) {
-        printk("bulksamp: confirmation for message type %d\n", (int)data[1]);
-    } else {
-		dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
-		return;
+    switch (type) {
+        case BULK_SAMP_MSG_READY:
+            handle_msg_ready(rpdev, data, len);
+            break;
+        case BULK_SAMP_MSG_CONFIRM:
+            handle_msg_confirm(rpdev, data, len);
+            break;
+        default:
+            dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
     }
-
 }
 
 /* copypaste from rpmsg_rpc.c */
@@ -302,7 +312,6 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 
     /* Allocate large buffers for data transfer. */
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
-        u64 da;
         /* TODO: for better performance this could use streaming DMA but
          * for now we use the simpler solution of coherent buffers */
 		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev, 
@@ -324,6 +333,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	dev_info(&rpdev->dev, "new bulk_samp device: /dev/bulk_samp%d",
 		 rpdev->dst);
 
+    printk("bulk_samp buffers\n");
 	ret = rpmsg_send(prudev->rpdev, &buf_msg, sizeof(buf_msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send buf_msg failed: %d\n", ret);
