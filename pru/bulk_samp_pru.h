@@ -22,7 +22,7 @@ typedef struct{
 	*/
 } bufferData;
 
-#define XFER_SIZE (sizeof(bufferData) / 8)
+#define XFER_SIZE sizeof(bufferData)
 
 #define PRU0_PRU1_EVT (16)
 #define PRU0_PRU1_TRIGGER (__R31 = (PRU0_PRU1_EVT - 16) | (1 << 5))
