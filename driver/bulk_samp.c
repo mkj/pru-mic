@@ -228,6 +228,8 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 
     if (type == BULK_SAMP_MSG_READY) {
         handle_msg_ready(rpdev, data, len);
+    if (type == BULK_SAMP_MSG_CONFIRM) {
+        printk("bulksamp: confirmation for message type %d\n", (int)data[1]);
     } else {
 		dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
 		return;
@@ -312,13 +314,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
         /* clear it to avoid bugs exposing kernel memory */
         memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
 
-        da = cpu_to_virtio64(vdev, prudev->sample_buffers_phys[i]);
-        if (da) {
-            buf_msg.buffers[i] = (uint32_t)da;
-        } else {
-			dev_err(&rpdev->dev, "Unable to map physical address %llx to device.\n", (u64)prudev->sample_buffers_phys[i]);
-			goto fail_alloc_buffers;
-        }
+        buf_msg.buffers[i] = prudev->sample_buffers_phys[i];
 	}
 
 	init_waitqueue_head(&prudev->wait_list);
