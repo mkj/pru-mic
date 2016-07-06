@@ -23,3 +23,7 @@ processing:
 
 disable hdmi:
 http://circuitco.com/support/index.php?title=Weather_Cape_Work-Around
+
+
+dma:
+	rproc_alloc_vring()

@@ -40,6 +40,7 @@
 #include <rsc_types.h>
 #include <pru_virtqueue.h>
 #include <pru_rpmsg.h>
+#include <pru_ctrl.h>
 #include <sys_mailbox.h>
 #include "resource_table_1.h"
 
@@ -84,10 +85,6 @@
 #define PAYLOAD_SIZE (RPMSG_BUF_SIZE-16)
 uint8_t payload[PAYLOAD_SIZE];
 
-/* Sample payload and position */
-static uint8_t out_payload[PAYLOAD_SIZE];
-
-
 static uint8_t *out_buffers[BULK_SAMP_NUM_BUFFERS];
 static uint8_t out_index;
 static int out_pos;
@@ -95,15 +92,30 @@ static int out_pos;
 struct pru_rpmsg_transport transport;
 uint16_t src, dst;
 
-char going;
+char going = 0;
 
 /* Receive samples from the other PRU, fill buffer and send to the 
 ARM host if ready */
 void grab_samples()
 {
-    bufferData regbuf;
+    struct _regbuf {
+        // 40 bytes
+        uint32_t x0;
+        uint32_t x1;
+        uint32_t x2;
+        uint32_t x3;
+        uint32_t x4;
+    } regbuf; 
     // base address is r18
+#ifdef TEST_CLOCK_OUT
+    regbuf.x0 = PRU0_CTRL.CYCLE;
+    regbuf.x1 = PRU0_CTRL.CYCLE;
+    regbuf.x2 = PRU0_CTRL.CYCLE;
+    regbuf.x3 = PRU0_CTRL.CYCLE;
+    regbuf.x4 = PRU0_CTRL.CYCLE;
+#else
     __xin(10, 18, 0, regbuf);
+#endif
 
     if (!out_buffers[out_index])
     {
@@ -112,18 +124,18 @@ void grab_samples()
     }
 
     /* Copy into payload */
-    *((bufferData*)&out_buffers[out_index][out_pos]) = regbuf;
+    *((struct _regbuf*)&out_buffers[out_index][out_pos]) = regbuf;
     out_pos += sizeof(bufferData);
 
     /* Buffer is full, send it */
     if (BULK_SAMP_BUFFER_SIZE - out_pos < XFER_SIZE) {
-        struct bulk_samp_msg_ready *m = (void*)out_payload;
+        struct bulk_samp_msg_ready *m = (void*)payload;
         m->type = BULK_SAMP_MSG_READY;
         m->buffer_index = out_index;
         m->size = out_pos;
         m->checksum = 0;
         m->magic = 12349876;
-        pru_rpmsg_send(&transport, dst, src, out_payload, sizeof(struct bulk_samp_msg_ready));
+        pru_rpmsg_send(&transport, dst, src, payload, sizeof(struct bulk_samp_msg_ready));
         // reset buffers
         out_index = (out_index+1) % BULK_SAMP_NUM_BUFFERS;
         out_pos = 0;
@@ -138,6 +150,17 @@ void poke_pru0(char msg, int value)
 
     // trigger
     __xout(10, 27, 0, one);
+}
+
+void reply_confirm(uint8_t type)
+{
+    struct bulk_samp_msg_confirm msg = 
+    { 
+        .type = BULK_SAMP_MSG_CONFIRM,
+        .confirm_type = type,
+    };
+
+    pru_rpmsg_send(&transport, dst, src, &msg, sizeof(msg));
 }
 
 /* Handle control messages from the arm host */
@@ -252,18 +275,29 @@ void setup_rpmsg()
     }
 }
 
-/*
- * main.c
- */
+// how many cycles between calls to GRAB_SAMPLE_INTERVAL, for testing.
+#define GRAB_SAMPLE_INTERVAL (50 * XFER_SIZE)
+
 void main() {
     uint32_t val;
-    going = 0; /* whether to be sending samples to the arm host */
 
     setup_rpmsg();
     setup_pru_comm();
 
+    uint32_t last_sample = PRU0_CTRL.CYCLE;
+
     while(1)
     {
+#ifdef TEST_CLOCK_OUT
+        if (PRU0_CTRL.CYCLE - last_sample > GRAB_SAMPLE_INTERVAL)
+        {
+            last_sample = PRU0_CTRL.CYCLE;
+            if (going)
+            {
+                grab_samples();
+            }
+        }
+#else
         __xin(10, 28, 0, val);
         /* Check for message from the other pru */
         if(val)
@@ -274,6 +308,7 @@ void main() {
                 grab_samples();
             }
         }
+#endif
 
         /* Check bit 31 of register R31 to see if the mailbox interrupt has occurred */
         if(__R31 & ARM_INT) 
