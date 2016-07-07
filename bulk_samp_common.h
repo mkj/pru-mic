@@ -6,6 +6,8 @@
 #define BULK_SAMP_NUM_BUFFERS          (2)
 #define BULK_SAMP_BUFFER_SIZE          (4*1024*1024)
 
+#define RPMSG_CHAN_NAME                 "bulksamp-pru"
+
 // message types
 // cpu to device
 #define BULK_SAMP_MSG_BUFFERS 1
@@ -16,6 +18,7 @@
 #define BULK_SAMP_MSG_READY 20
 // debug
 #define BULK_SAMP_MSG_CONFIRM 40
+#define BULK_SAMP_MSG_DEBUG 41
 
 struct bulk_samp_msg_buffers {
     uint8_t type;
@@ -44,6 +47,15 @@ struct bulk_samp_msg_ready {
     uint32_t size; // XXX needed? probably always just buffer_size
     uint32_t checksum; // checksum including magic
     uint32_t magic; // written to start/end of buffer? or just included in checksum?
+};
+
+struct bulk_samp_msg_debug {
+    uint8_t type;
+    char str1[30];
+    char str2[30];
+    uint32_t num1;
+    uint32_t num2;
+    uint32_t num3;
 };
 
 #endif // BULK_SAMP_H

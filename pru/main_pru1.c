@@ -69,8 +69,6 @@
  * Using the name 'rpmsg-pru' will probe the rpmsg_pru driver found
  * at linux-x.y.z/drivers/rpmsg/rpmsg_pru.c
  */
-//#define CHAN_NAME                 "rpmsg-client-sample"
-#define RPMSG_CHAN_NAME                 "bulksamp-pru"
 
 /* XXX give a nice name */
 #define RPMSG_CHAN_DESC                 "bulksamp PRU input interface"
@@ -122,7 +120,6 @@ void grab_samples()
     if (!out_buffers[out_index])
     {
         // safety
-        reply_confirm(102);
         return;
     }
     reply_confirm(101);
@@ -143,6 +140,9 @@ void grab_samples()
         // reset buffers
         out_index = (out_index+1) % BULK_SAMP_NUM_BUFFERS;
         out_pos = 0;
+#ifdef TEST_CLOCK_OUT
+        going = 0;
+#endif
     }
 }
 
@@ -164,6 +164,31 @@ void reply_confirm(uint8_t type)
         .confirm_type = type,
     };
 
+    pru_rpmsg_send(&transport, dst, src, &msg, sizeof(msg));
+}
+
+void send_message_debug(const char* s1, const char* s2,
+    uint32_t n1, uint32_t n2, uint32_t n3)
+{
+    uint8_t n;
+    struct bulk_samp_msg_debug msg =
+    {
+        .type = BULK_SAMP_MSG_DEBUG,
+        .num1 = n1,
+        .num2 = n2,
+        .num3 = n3,
+    };
+    // strcpy
+    for (n = 0; s1[n] && n < sizeof(msg.str1)-1; n++)
+    {
+        msg.str1[n] = s1[n];
+    }
+    msg.str1[n] = '\0';
+    for (n = 0; s2[n] && n < sizeof(msg.str2)-1; n++)
+    {
+        msg.str2[n] = s2[n];
+    }
+    msg.str2[n] = '\0';
     pru_rpmsg_send(&transport, dst, src, &msg, sizeof(msg));
 }
 

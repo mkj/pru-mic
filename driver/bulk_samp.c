@@ -223,6 +223,14 @@ static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len)
     printk("bulk_samp: got confirm for message type %d\n", (int)msg->confirm_type);
 }
 
+static void handle_msg_debug(struct rpmsg_channel *rpdev, void *data, int len) 
+{
+    struct bulk_samp_msg_debug *msg = data;
+
+    printk("bulk_samp debug: %s %s %u %u %u\n",
+    	msg->str1, msg->str2, msg->num1, msg->num2, msg->num3);
+}
+
 static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			 void *priv, u32 src)
 {
@@ -241,6 +249,9 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
             break;
         case BULK_SAMP_MSG_CONFIRM:
             handle_msg_confirm(rpdev, data, len);
+            break;
+        case BULK_SAMP_MSG_DEBUG:
+            handle_msg_debug(rpdev, data, len);
             break;
         default:
             dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
