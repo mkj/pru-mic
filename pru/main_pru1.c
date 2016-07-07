@@ -100,8 +100,10 @@ static void send_message_debug(const char* s1, const char* s2,
 ARM host if ready */
 void grab_samples()
 {
-    struct _regbuf {
-        // 40 bytes
+    struct 
+    __attribute__((__packed__))
+    _regbuf {
+        // 20 bytes
         uint32_t x0;
         uint32_t x1;
         uint32_t x2;

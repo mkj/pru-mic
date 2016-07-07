@@ -9,20 +9,7 @@ void sampleloop();
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
 
-typedef struct{
-	uint8_t dat[40];
-	/*
-	XXX why did sample code do it like this?
-	uint32_t reg5;
-	uint32_t reg6;
-	uint32_t reg7;
-	uint32_t reg8;
-	uint32_t reg9;
-	uint32_t reg10;
-	*/
-} bufferData;
-
-#define XFER_SIZE sizeof(bufferData)
+#define XFER_SIZE 20
 
 #define PRU0_PRU1_EVT (16)
 #define PRU0_PRU1_TRIGGER (__R31 = (PRU0_PRU1_EVT - 16) | (1 << 5))
