@@ -93,6 +93,8 @@ uint16_t src, dst;
 char going = 0;
 
 static void reply_confirm(uint8_t type);
+static void send_message_debug(const char* s1, const char* s2,
+    uint32_t n1, uint32_t n2, uint32_t n3);
 
 /* Receive samples from the other PRU, fill buffer and send to the 
 ARM host if ready */
@@ -122,7 +124,6 @@ void grab_samples()
         // safety
         return;
     }
-    reply_confirm(101);
 
     /* Copy into payload */
     *((struct _regbuf*)&out_buffers[out_index][out_pos]) = regbuf;
@@ -156,7 +157,7 @@ void poke_pru0(char msg, int value)
     __xout(10, 27, 0, one);
 }
 
-void reply_confirm(uint8_t type)
+static void reply_confirm(uint8_t type)
 {
     struct bulk_samp_msg_confirm msg = 
     { 
@@ -167,7 +168,7 @@ void reply_confirm(uint8_t type)
     pru_rpmsg_send(&transport, dst, src, &msg, sizeof(msg));
 }
 
-void send_message_debug(const char* s1, const char* s2,
+static void send_message_debug(const char* s1, const char* s2,
     uint32_t n1, uint32_t n2, uint32_t n3)
 {
     uint8_t n;
@@ -232,9 +233,11 @@ void handle_rpmsg()
                         case BULK_SAMP_MSG_BUFFERS:
                         {
                             struct bulk_samp_msg_buffers *m = (void*)payload;
+                            send_message_debug("buffers", "", 1, 2, 3);
                             for (int i = 0; i < BULK_SAMP_NUM_BUFFERS; i++)
                             {
                                 out_buffers[i] = (void*)m->buffers[i];
+                                send_message_debug("buffer", "", i, (uint32_t)out_buffers[i], 0);
                             }
                             out_index = 0;
                         }
@@ -242,6 +245,7 @@ void handle_rpmsg()
                     }
                 }
                 reply_confirm(payload[0]);
+                send_message_debug("got message", "abc", payload[0], 0, 0);
             }
         }
     }

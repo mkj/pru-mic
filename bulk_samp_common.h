@@ -20,28 +20,38 @@
 #define BULK_SAMP_MSG_CONFIRM 40
 #define BULK_SAMP_MSG_DEBUG 41
 
-struct bulk_samp_msg_buffers {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_buffers {
     uint8_t type;
     uint32_t buffers[BULK_SAMP_NUM_BUFFERS];
 };
 
-struct bulk_samp_msg_confirm {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_confirm {
     uint8_t type;
     uint8_t confirm_type;
 };
 
 // start sampling continuously
-struct bulk_samp_msg_start {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_start {
     uint8_t type;
     uint32_t clock_hz;
 };
 
-struct bulk_samp_msg_stop {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_stop {
     uint8_t type;
 };
 
 // Sent when the buffer is full/finished
-struct bulk_samp_msg_ready {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_ready {
     uint8_t type;
     uint8_t buffer_index;
     uint32_t size; // XXX needed? probably always just buffer_size
@@ -49,10 +59,12 @@ struct bulk_samp_msg_ready {
     uint32_t magic; // written to start/end of buffer? or just included in checksum?
 };
 
-struct bulk_samp_msg_debug {
+struct 
+__attribute__((__packed__))
+bulk_samp_msg_debug {
     uint8_t type;
-    char str1[30];
-    char str2[30];
+    char str1[32];
+    char str2[32];
     uint32_t num1;
     uint32_t num2;
     uint32_t num3;
