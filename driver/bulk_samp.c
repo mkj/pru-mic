@@ -323,6 +323,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
         /* clear it to avoid bugs exposing kernel memory */
         memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
 
+        printk("bulk_samp buffer %d, virt %p, phys %p\n",
+        	i, prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
         buf_msg.buffers[i] = prudev->sample_buffers_phys[i];
 	}
 
