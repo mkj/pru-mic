@@ -15,17 +15,33 @@
         ; r5-r13 save on entry
         .asg r15, rlowbits
         .asg r16, rhighbits
+        .asg r17, rcycleaddr
         ; r18-r22 are sample buffer
+        .asg r25, rcounteraddr
+        .asg r26, rcountindex
         .asg r27, rxinflag
         .asg r28, rtmp28
         .asg r29, rcounter
         ; r30/r31 control
 
+        ; reset cycle counter to 0x7654
+        LDI32     r0, 0x00022000        ; [ALU_PRU] |36| $O$C1
+        LBBO      &r1, r0, 0, 4         ; [ALU_PRU] |36| 
+        CLR       r1, r1, 0x00000003    ; [ALU_PRU] |36| 
+        SBBO      &r1, r0, 0, 4         ; [ALU_PRU] |36| 
+        LDI       r1, 0x7654            ; [ALU_PRU] |37| 
+        SBBO      &r1, r0, 0xc, 4        ; [ALU_PRU] |37| $O$C1
+        LBBO      &r1, r0, 0, 4         ; [ALU_PRU] |38| $O$C1
+        SET       r1, r1, 0x00000003    ; [ALU_PRU] |38| 
+        SBBO      &r1, r0, 0, 4         ; [ALU_PRU] |38| $O$C1
+
         ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r22
         ldi       rindexend, 91 ; end address
-        ;LDI32     r0, 0x0002200c
-        ;LBBO      &r0, r0, 0, 4   ; load CYCLE register
-        ;SBBO      &r0, r1, 0, 4   ; save it to cyclestart
+        LDI32     rcycleaddr, 0x0002200c
+
+        ldi       rcountindex, 0  ; send out msb first
+        LBBO      &rcounter, rcycleaddr, 0, 4
+        ldi       rcounteraddr, &rcounter
 
         ldi r18, 0x18
         ldi r19, 0x19
@@ -55,10 +71,10 @@
 ;       NOP
 
 ; cyclecount read
-        AND       rlowbits, rcounter, 0xf     ; read low 4 bits, gpio samples from select-high mics
-        ADD       rcounter, rcounter, 1
-        NOP
+        LBBO      &rlowbits.b0, rcounteraddr, rcountindex, 1
+        AND       rlowbits, rlowbits, 0xf     ; read low 4 bits, gpio samples from select-high mics
 
+        NOP
         NOP
         NOP
         NOP
@@ -79,17 +95,17 @@
         NOP
         NOP
         NOP
-        NOP
 
 ; real read
 ;       NOP
 ;       NOP
-;       AND       rhighbits, r31, 0x0f         ; low 4 bits, gpio samples from select-low mics
+;       AND       rhighbits, r31, 0x0f         ; 4 bits, gpio samples from select-low mics
 
-; cyclecount read
-        AND       rhighbits, rcounter, 0xf     ; read low 4 bits, gpio samples from select-high mics
-        ADD       rcounter, rcounter, 1
+        LBBO      &rhighbits.b0, rcounteraddr, rcountindex, 1
+        AND       rhighbits, rhighbits, 0xf     ; read low 4 bits, gpio samples from select-high mics
+        ;SUB       rcountindex, rcountindex, 1
         NOP
+        AND       rcountindex, rcountindex, 3 ; 4 bytes
 
         LSL       rhighbits, rhighbits, 4           ; store in high nibble
         OR        rhighbits, rhighbits, rlowbits
@@ -102,16 +118,17 @@
         ldi rtmp28, 1
         xout 10, &rtmp28, 4               ; wake up pru1 with a flag 
         ldi       rindex, &r18.b0 ; reset base address for samples
-        ;LDI32     r26, 0x0002200c
-        ;LBBO      &r0, r0, 0, 4   ; load CYCLE register
-        ;SBBO      &r0, r1, 0, 4   ; save it to cyclestart
+        ldi       rcountindex, 0  ; send out msb first
+        LBBO      &rcounter, rcycleaddr, 0, 4
         jmp ||$donexfer||
 
 ||$noxfer||
-        nop ; 5 nops to match the 5 transfer instructions above
+        nop ; nops to match the transfer instructions above
         nop
         nop
         nop
+        nop
+        nop 
         nop
 
 ||$donexfer||
@@ -119,6 +136,4 @@
         nop
         nop
         nop
-        nop
-        nop 
         jmp ||$top|| ; 25 cycles

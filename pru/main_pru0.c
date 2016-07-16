@@ -14,6 +14,9 @@
 #include "../bulk_samp_common.h"
 #include "bulk_samp_pru.h"
 
+// from asmpr0.asm
+void sampleloop();
+
 static char going = 0;
 
 static void clear_pru0_msg_flag()
@@ -25,7 +28,6 @@ static void clear_pru0_msg_flag()
 void setup_pru()
 {
 	clear_pru0_msg_flag();
-    PRU0_CTRL.CTRL_bit.CTR_EN = 1;
 #if 0
 	/* Set up PRU1->PRU0 interrupts */
 	/* Map event 17 (PRU1_PRU0_EVT) to channel 1 */
@@ -58,6 +60,7 @@ void handle_pru_msg()
 		case BULK_SAMP_MSG_START:
 		{
 			going = 1;
+			reset_cyclecount();
 		}
 		break;
 		case BULK_SAMP_MSG_STOP:

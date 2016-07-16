@@ -199,6 +199,7 @@ static void send_message_debug(const char* s1, const char* s2,
 void handle_rpmsg() 
 {
     uint16_t len;
+    reset_cyclecount();
     /* Clear the mailbox interrupt */
     CT_MBX.IRQ[MB_USER].STATUS_CLR |= 1 << (MB_FROM_ARM_HOST * 2);
     /* Clear the event status, event MB_INT_NUMBER corresponds to the mailbox interrupt */
@@ -230,6 +231,9 @@ void handle_rpmsg()
                             going = 0;
                             poke_pru0(BULK_SAMP_MSG_STOP, 1);
                             /* Discard output */
+
+                            send_message_debug("cycle", "stop message", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 666, PRU0_CTRL.STALL);
+
                         }
                         break;
                         case BULK_SAMP_MSG_BUFFERS:
@@ -262,7 +266,7 @@ static void clear_pru1_msg_flag()
 static void setup_pru()
 {
     clear_pru1_msg_flag();
-    PRU0_CTRL.CTRL_bit.CTR_EN = 1;
+    reset_cyclecount();
 #if 0
     /* Set up PRU0->PRU1 interrupts */
     /* Map event 16 (PRU0_PRU1_EVT) to channel 1 */
@@ -321,7 +325,7 @@ void main() {
     setup_rpmsg();
     setup_pru();
 
-    uint32_t last_sample = PRU0_CTRL.CYCLE;
+    send_message_debug("cycle", "begin", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 888, PRU0_CTRL.STALL);
 
     while(1)
     {

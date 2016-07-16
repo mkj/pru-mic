@@ -3,9 +3,6 @@
 
 // Matt Johnston <matt@ucc.asn.au> 2016
 
-// from asmpr0.asm
-void sampleloop();
-
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
 
@@ -35,5 +32,10 @@ struct bulk_samp_shared {
 
 volatile struct bulk_samp_shared *pru_sharedmem = (struct bulk_samp_shared*)((void*)DPRAM_SHARED);
 
+static void reset_cyclecount() {
+    PRU0_CTRL.CTRL_bit.CTR_EN = 0;
+    PRU0_CTRL.CYCLE = 0;
+    PRU0_CTRL.CTRL_bit.CTR_EN = 1;
+}
 
 #endif /* BULK_SAMP_PRU_H */
