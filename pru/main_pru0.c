@@ -60,7 +60,6 @@ void handle_pru_msg()
 		case BULK_SAMP_MSG_START:
 		{
 			going = 1;
-			reset_cyclecount();
 		}
 		break;
 		case BULK_SAMP_MSG_STOP:
