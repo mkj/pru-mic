@@ -41,7 +41,7 @@
 
         LDI       rsamplecount, 0
 
-        ldi       rcountindex, 3  ; send out msb first
+        ldi       rcountindex, 24  ; send out msb first
         ;LBBO      &rcounter, rcycleaddr, 0, 4
         ldi32       rcounter, 0x1a2b3c4d
 
@@ -69,7 +69,6 @@
 
 ; real read
 ;       AND       rtmp15, r31, 0xf     ; read low 4 bits, gpio samples from select-high mics
-;       NOP
 ;       NOP
 
 ; cyclecount read
@@ -108,27 +107,26 @@
         ;LSL       rhighbits, rhighbits, 4           ; store in high nibble
         NOP ; real case we would be reading the same bits again, need to shift
 
-        SUB       rcountindex, rcountindex, 1
-        AND       rcountindex, rcountindex, 3 ; 0-3 bytes
+        SUB       rcountindex, rcountindex, 8
+        AND       rcountindex, rcountindex, 31 ; 0-31 bits
 
         OR        rhighbits, rhighbits, rlowbits
         ; for some reason mvib only seems to work with b3 source byte?
-        mov rhighbits.b3, rhighbits.b0 
-        mvib *rindex++, rhighbits     ; store sample in r18-r22 buffer
+        mvib *rindex++, rhighbits.b0     ; store sample in r18-r22 buffer
 
         qblt ||$noxfer||, rindexend, rindex   ; take note, this "rindex <= rindexend"
 
         ; transfer instructions
-        mov r22, rsamplecount ; debug
+        LBBO      &r22, rcycleaddr, 4, 4
         add rsamplecount, rsamplecount, 1
         xout 10, &r18, 20              ; transfer r18-r22 to bank0
         ldi rtmp28, 1
         xout 10, &rtmp28, 4               ; wake up pru1 with a flag 
         ldi       rindex, &r18.b0 ; reset base address for samples
         ;ldi       rcountindex, 3  ; send out msb first
-        LBBO      &rcounter, rcycleaddr, 0, 4
+        ;LBBO      &rcounter, rcycleaddr, 0, 4
         ;ldi32       rcounter, 0x1a2b3c4d
-        ;add       rcounter, rcounter, 1
+        add       rcounter, rcounter, 1
         jmp ||$donexfer||
 
 ||$noxfer||

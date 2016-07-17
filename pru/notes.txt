@@ -27,3 +27,6 @@ http://circuitco.com/support/index.php?title=Weather_Cape_Work-Around
 
 dma:
 	rproc_alloc_vring()
+
+5dump:
+hexdump -e '"%14_ad  "' -e '4/1 "%02x " "  " 4/1 "%02x " "  " 4/1 "%02x " "  " 4/1 "%02x " "  " 4/1 "%02x " "  " ' -e '"|" 20/1 "%_p" "|\n"'
