@@ -95,7 +95,6 @@
         NOP
         NOP
         NOP
-        NOP
 
 ; real read
 ;       NOP
@@ -117,7 +116,8 @@
         qblt ||$noxfer||, rindexend, rindex   ; take note, this "rindex <= rindexend"
 
         ; transfer instructions
-        LBBO      &r22, rcycleaddr, 4, 4
+        LBBO      &r22, rcycleaddr, 0, 4
+        ; takes 4 cycles?
         add rsamplecount, rsamplecount, 1
         xout 10, &r18, 20              ; transfer r18-r22 to bank0
         ldi rtmp28, 1
@@ -136,11 +136,12 @@
         nop
         nop
         nop
+        nop
         nop 
+        nop
+        nop
         nop
 
 ||$donexfer||
 
-        nop
-        nop
         jmp ||$top|| ; 25 cycles
