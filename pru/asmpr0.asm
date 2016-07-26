@@ -22,7 +22,7 @@
 
         ; GPIO pins are 
         ; input
-        ; P9_24 pr1_pru0_pru_r31_16
+        ; P9_28 pr1_pru0_pru_r31_3
         ; P9_25 pr1_pru0_pru_r31_7
         ; P9_29 pr1_pru0_pru_r31_5
         ; P9_30 pr1_pru0_pru_r31_2
@@ -66,18 +66,15 @@
         LDI rsample, 0
         NOP ; 40ns/8 cycles wait done
 
-        ; permute input gpio pin bits 2 7 16 5 -> 0 1 2 3
+        ; permute input gpio pin bits 2 3 7 5 -> 0 1 2 3
         ; data0 P9_30 pr1_pru0_pru_r31_2
-        ; data1 P9_25 pr1_pru0_pru_r31_7
-        ; data2 P9_24 pr1_pru0_pru_r31_16
+        ; data1 P9_24 pr1_pru0_pru_r31_3
+        ; data2 P9_25 pr1_pru0_pru_r31_7
         ; data3 P9_29 pr1_pru0_pru_r31_5
-        lsr rtmp28, r31, 2 ; data0 and data3 in place
-        and rsample, rtmp28, 0x9 ; mask 1001
-        lsr rtmp27, rtmp28, 4; data1, total shift 6
-        and rtmp27, rtmp27, 2
-        or rsample, rsample, rtmp27
-        lsr rtmp27, rtmp28, 12; data2, total shift 14
-        and rtmp27, rtmp27, 4
+        lsr rtmp28, r31, 2 ; data0, data1, data3 in place
+        and rsample, rtmp28, 1011B ; mask 
+        lsr rtmp27, rtmp28, 3; data2, total shift 5
+        and rtmp27, rtmp27, 0100B
         or rsample, rsample, rtmp27
 
         ; untested optimisation using byte-offset operations
@@ -88,6 +85,9 @@
         ;or rtmp28, rtmp28, rtmp27
         ;or rsample.b0, rsample.b0, rtmp28
 
+        NOP
+        NOP
+        NOP
         NOP
         NOP
         NOP
@@ -109,22 +109,21 @@
         NOP
         NOP ; 40ns/8 cycle wait done
 
-        ; permute input gpio pin bits 2 7 16 5 -> 4 5 6 7
+        ; permute input gpio pin bits 2 3 7 5 -> 4 5 6 7
         ; data4 P9_30 pr1_pru0_pru_r31_2
-        ; data5 P9_25 pr1_pru0_pru_r31_7
-        ; data6 P9_24 pr1_pru0_pru_r31_16
+        ; data5 P9_24 pr1_pru0_pru_r31_3
+        ; data6 P9_25 pr1_pru0_pru_r31_7
         ; data7 P9_29 pr1_pru0_pru_r31_5
-        lsl rtmp28, r31, 2 ; data4 and data7 in place
-        and rtmp27, rtmp28, 0x90 ; mask 10010000
+        lsl rtmp28, r31, 2 ; data4, data5, data7 in place
+        and rtmp27, rtmp28, 10110000B ; mask 10010000
         or rsample, rsample, rtmp27 
-        lsr rtmp27, rtmp28, 4; data5, total shift right 2
-        and rtmp27, rtmp27, 0x20
+        lsr rtmp27, rtmp28, 3; data6, total shift right 1
+        and rtmp27, rtmp27, 01000000B
         or rsample, rsample, rtmp27
-        lsr rtmp27, rtmp28, 12; data6, total shift right 10
-        and rtmp27, rtmp27, 0x40
-        or rsample, rsample, rtmp27
-
         mvib *rindex++, rsample.b0     ; store sample in r18-r22 buffer
+        NOP
+        NOP
+        NOP
 
         qblt ||$noxfer||, rindexend, rindex   ; take note, this "rindex < rindexend"
 
