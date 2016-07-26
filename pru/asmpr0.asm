@@ -75,10 +75,18 @@
         and rsample, rtmp28, 0x9 ; mask 1001
         lsr rtmp27, rtmp28, 4; data1, total shift 6
         and rtmp27, rtmp27, 2
-        or rsample, rsample, r27
+        or rsample, rsample, rtmp27
         lsr rtmp27, rtmp28, 12; data2, total shift 14
         and rtmp27, rtmp27, 4
-        or rsample, rsample, r27
+        or rsample, rsample, rtmp27
+
+        ; untested optimisation using byte-offset operations
+        ;lsl rtmp28, r31, 1
+        ;or rtmp28, rtmp28, rtmp28.b1
+        ;or rtmp28, rtmp28, rtmp28.b2
+        ;lsr rtmp27, rtmp28, 4
+        ;or rtmp28, rtmp28, rtmp27
+        ;or rsample.b0, rsample.b0, rtmp28
 
         NOP
         NOP
