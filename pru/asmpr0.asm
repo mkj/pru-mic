@@ -20,15 +20,6 @@
         .asg r28, rtmp28 ; triggers pru1, general register
         ; r30/r31 control
 
-        ; GPIO pins are 
-        ; input
-        ; P9_28 pr1_pru0_pru_r31_3
-        ; P9_25 pr1_pru0_pru_r31_7
-        ; P9_29 pr1_pru0_pru_r31_5
-        ; P9_30 pr1_pru0_pru_r31_2
-        ; output
-        ; clock P9_41 pr1_pru0_pru_r30_6 
-
         ; reset cycle counter to 0x7654
         LDI32     r0, 0x00022000        ; [ALU_PRU] |36| $O$C1
         LBBO      &r1, r0, 0, 4         ; [ALU_PRU] |36| 
@@ -54,7 +45,7 @@
         ; the loop is _exactly_ 50 cycles long, for 4mhz clock cycle
 
 ||$top||
-        SET       r30, r30, 6 ; clock high
+        SET       r30, r30, 5 ; clock high
         XIN 10, &rtmp27, 4        ;    check r27.b0 for message from pru1
         QBBC      ||$keepgoing||, rtmp27, 1   
         JMP       r3.w2 ; return if message pending
@@ -66,15 +57,16 @@
         LDI rsample, 0
         NOP ; 40ns/8 cycles wait done
 
-        ; permute input gpio pin bits 2 3 7 5 -> 0 1 2 3
-        ; data0 P9_30 pr1_pru0_pru_r31_2
-        ; data1 P9_24 pr1_pru0_pru_r31_3
-        ; data2 P9_25 pr1_pru0_pru_r31_7
-        ; data3 P9_29 pr1_pru0_pru_r31_5
-        lsr rtmp28, r31, 2 ; data0, data1, data3 in place
-        and rsample, rtmp28, 1011B ; mask 
-        lsr rtmp27, rtmp28, 3; data2, total shift 5
-        and rtmp27, rtmp27, 0100B
+        ; permute input gpio pin bits 1 2 3 7 -> 0 1 2 3
+        ; P9_29 pr1_pru0_pru_r31_1 data0
+        ; P9_30 pr1_pru0_pru_r31_2 data1
+        ; P9_28 pr1_pru0_pru_r31_3 data2
+        ; P9_25 pr1_pru0_pru_r31_7 data3
+        ; P9_27 pr1_pru0_pru_r30_5 clock
+        lsr rtmp28, r31, 1 ; data0, data1, data2 in place
+        and rsample, rtmp28, 0111B ; mask 
+        lsr rtmp27, rtmp28, 3; data3, total shift 4
+        and rtmp27, rtmp27, 1000B
         or rsample, rsample, rtmp27
 
         ; untested optimisation using byte-offset operations
@@ -97,7 +89,7 @@
         NOP
         NOP ; 25 cycles
 
-        CLR       r30, r30, 6  ; clock low
+        CLR       r30, r30, 5  ; clock low
         ;LBBO      &r22, rcycleaddr, 0, 4
         ; takes 4 cycles?
         NOP
@@ -109,16 +101,12 @@
         NOP
         NOP ; 40ns/8 cycle wait done
 
-        ; permute input gpio pin bits 2 3 7 5 -> 4 5 6 7
-        ; data4 P9_30 pr1_pru0_pru_r31_2
-        ; data5 P9_24 pr1_pru0_pru_r31_3
-        ; data6 P9_25 pr1_pru0_pru_r31_7
-        ; data7 P9_29 pr1_pru0_pru_r31_5
-        lsl rtmp28, r31, 2 ; data4, data5, data7 in place
-        and rtmp27, rtmp28, 10110000B ; mask 10010000
+        ; permute input gpio pin bits 1 2 3 7 -> 4 5 6 7
+        lsl rtmp28, r31, 3 ; data4, data5, data6 in place
+        and rtmp27, rtmp28, 01110000B ; mask 10010000
         or rsample, rsample, rtmp27 
-        lsr rtmp27, rtmp28, 3; data6, total shift right 1
-        and rtmp27, rtmp27, 01000000B
+        lsr rtmp27, rtmp28, 3; data9, total shift right 1
+        and rtmp27, rtmp27, 10000000B
         or rsample, rsample, rtmp27
         mvib *rindex++, rsample.b0     ; store sample in r18-r22 buffer
         NOP
