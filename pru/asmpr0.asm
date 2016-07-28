@@ -111,7 +111,6 @@
         mvib *rindex++, rsample.b0     ; store sample in r18-r22 buffer
         NOP
         NOP
-        NOP
 
         qblt ||$noxfer||, rindexend, rindex   ; take note, this "rindex < rindexend"
 
@@ -119,6 +118,7 @@
         xout 10, &r18, 20              ; transfer r18-r22 to bank0
         ldi rtmp28, 1
         xout 10, &rtmp28, 4               ; wake up pru1 with a flag 
+        ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r22
         jmp ||$donexfer||
 
 ||$noxfer||
@@ -126,6 +126,7 @@
         nop
         nop
         nop
+        NOP
 
 ||$donexfer||
 
