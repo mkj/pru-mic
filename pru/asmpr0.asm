@@ -54,7 +54,7 @@
         NOP
         NOP
         NOP
-        LDI rsample, 0
+        NOP
         NOP ; 40ns/8 cycles wait done
 
         ; permute input gpio pin bits 1 2 3 7 -> 0 1 2 3
@@ -103,9 +103,9 @@
 
         ; permute input gpio pin bits 1 2 3 7 -> 4 5 6 7
         lsl rtmp28, r31, 3 ; data4, data5, data6 in place
-        and rtmp27, rtmp28, 01110000B ; mask 10010000
+        and rtmp27, rtmp28, 01110000B ; mask 
         or rsample, rsample, rtmp27 
-        lsr rtmp27, rtmp28, 3; data9, total shift right 1
+        lsr rtmp27, rtmp28, 3; data7
         and rtmp27, rtmp27, 10000000B
         or rsample, rsample, rtmp27
         mvib *rindex++, rsample.b0     ; store sample in r18-r22 buffer
