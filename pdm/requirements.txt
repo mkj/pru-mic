@@ -1,0 +1,10 @@
+cycler==0.10.0
+llvmlite==0.12.1
+matplotlib==1.5.1
+numba==0.27.0
+numpy==1.11.1
+pyparsing==2.1.5
+python-dateutil==2.5.3
+pytz==2016.6.1
+scipy==0.18.0
+six==1.10.0
