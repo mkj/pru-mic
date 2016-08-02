@@ -151,7 +151,7 @@ void grab_samples()
 
 void poke_pru0(char msg, int value)
 {
-    uint8_t one = 1;
+    uint32_t one = 1;
     pru_sharedmem->pru0_msg = msg;
     pru_sharedmem->pru0_val = value;
 
