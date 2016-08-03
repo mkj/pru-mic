@@ -103,10 +103,15 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 	}
 	mutex_unlock(&bulk_samp_lock);
 
-	if (ret)
+	if (ret) {
 		dev_err(prudev->dev, "Device already open\n");
+	}
 
     prudev->warned_full = false;
+    prudev->read_off = 0;
+    prudev->read_idx = 0;
+    prudev->read_off = 0;
+    smp_wmb();
 
     printk("bulk_samp open\n");
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
