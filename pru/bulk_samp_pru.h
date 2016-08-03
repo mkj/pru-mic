@@ -6,7 +6,7 @@
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
 
-#define XFER_SIZE 20
+#define XFER_SIZE 32
 
 #define PRU0_PRU1_EVT (16)
 #define PRU0_PRU1_TRIGGER (__R31 = (PRU0_PRU1_EVT - 16) | (1 << 5))

@@ -15,7 +15,7 @@
         ; r5-r13 save on entry
         .asg r15, rsample
         .asg r17, rcycleaddr
-        ; r18-r22 are sample buffer
+        ; r18-r25 are sample buffer
         .asg r26, rcounter ; debugging counter
         .asg r27, rtmp27 ; trigger from pru1, general register
         .asg r28, rtmp28 ; triggers pru1, general register
@@ -36,13 +36,7 @@
         LDI32     rcounter, 0
 
         ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r22
-        ldi       rindexend, &r23.b0 ; end address
-
-        ldi r18, 0x18
-        ldi r19, 0x19
-        ldi r20, 0x20
-        ldi r21, 0x21
-        ldi r22, 0x22
+        ldi       rindexend, &r26.b0 ; end address
 
         ; loop keeps running until pru1 does xout to r27
         ; the loop is _exactly_ 50 cycles long, for 4mhz clock cycle
@@ -98,12 +92,14 @@
         NOP
         NOP
 
-        ;NOP
-        ;NOP
-        ;NOP
-        mov r18, rcounter
-        mov r19, rcounter
-        add rcounter, rcounter, 1
+        NOP
+        NOP
+        NOP
+        ; debugging
+        ;mov r18, rcounter
+        ;mov r19, rcounter
+        ;add rcounter, rcounter, 1
+
         NOP ; 40ns/8 cycle wait done
 
         ; permute input gpio pin bits 1 2 3 7 -> 4 5 6 7
@@ -120,10 +116,10 @@
         qblt ||$noxfer||, rindexend, rindex   ; take note, this "rindex < rindexend"
 
         ; transfer instructions
-        xout 10, &r18, 20              ; transfer r18-r22 to bank0
+        xout 10, &r18, 32              ; transfer r18-r25 to bank0
         ldi rtmp28, 1
         xout 10, &rtmp28, 4               ; wake up pru1 with a flag 
-        ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r22
+        ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r25
         jmp ||$donexfer||
 
 ||$noxfer||

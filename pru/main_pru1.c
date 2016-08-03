@@ -105,12 +105,15 @@ void grab_samples()
     struct 
     __attribute__((__packed__))
     _regbuf {
-        // 20 bytes
+        // 32 bytes
         uint32_t x0;
         uint32_t x1;
         uint32_t x2;
         uint32_t x3;
         uint32_t x4;
+        uint32_t x5;
+        uint32_t x6;
+        uint32_t x7;
     } regbuf; 
     // base address is r18
 #ifdef TEST_CLOCK_OUT
@@ -119,6 +122,9 @@ void grab_samples()
     regbuf.x2 = 'a';
     regbuf.x3 = 'i';
     regbuf.x4 = 'r';
+    regbuf.x5 = 'i';
+    regbuf.x6 = 'o';
+    regbuf.x7 = 't';
 #else
     __xin(10, 18, 0, regbuf);
 #endif
@@ -134,7 +140,7 @@ void grab_samples()
     out_pos += XFER_SIZE;
 
     /* Buffer is full, send it */
-    if (out_pos >= buffer_size - XFER_SIZE) {
+    if (out_pos > buffer_size - XFER_SIZE) {
         struct bulk_samp_msg_ready *m = (void*)payload;
         m->type = BULK_SAMP_MSG_READY;
         m->buffer_index = out_index;

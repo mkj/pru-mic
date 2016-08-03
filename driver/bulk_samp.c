@@ -36,6 +36,7 @@
 #include "../bulk_samp_common.h"
 
 #define BULK_SAMP_NUM_BUFFERS          (2)
+// buffer size must be a multiple of PRU's XFER_SIZE (currently 32)
 #define BULK_SAMP_BUFFER_SIZE          (4*1024*1024)
 
 #define PRU_MAX_DEVICES				(8)
@@ -290,6 +291,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
     struct rproc *rp;
     struct virtio_device *vdev;
 
+    printk("bulk_samp driver - Matt Johnston <matt@ucc.asn.au>\n");
     rp = rpdev_to_rproc(rpdev);
 
 	prudev = devm_kzalloc(&rpdev->dev, sizeof(*prudev), GFP_KERNEL);
@@ -463,6 +465,6 @@ module_init(bulk_samp_init);
 module_exit(bulk_samp_exit);
 
 // TODO
-MODULE_AUTHOR("Jason Reeder <jreeder@ti.com>");
-MODULE_DESCRIPTION("PRU Remote Processor Messaging Driver");
+MODULE_AUTHOR("Matt Johnston <matt@ucc.asn.au>");
+MODULE_DESCRIPTION("bulksamp pru input");
 MODULE_LICENSE("GPL v2");
