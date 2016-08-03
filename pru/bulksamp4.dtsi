@@ -1,0 +1,46 @@
+/* Put this at 
+
+/opt/source/dtb-4.1-ti/src/arm/
+
+Then add
+#include "bulksamp4.dtsi"
+to
+/opt/source/dtb-4.1-tisrc/arm/am335x-boneblack-overlay.dts
+
+In dtb-41-tisrc directory "make; make install" then put 
+dtb=am335x-boneblack-overlay.dtb
+in /boot/uEnv.txt
+
+/*
+ * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+&am33xx_pinmux {
+	pru_cape_bone_pins: pru_cape_bone_pins {
+		pinctrl-single,pins = <
+			0x1a4 0xd	/* mcasp0_fsr, OMAP_MUX_MODE6 | AM33XX_PIN_INPUT, PRU CAPE SW1 */
+			0x1ac 0x2e	/* mcasp0_ahclkx, OMAP_MUX_MODE6 | AM33XX_PIN_INPUT, PRU CAPE SW2 */
+			0x19c 0x2e	/* mcasp0_ahclkr, OMAP_MUX_MODE5 | AM33XX_PIN_OUTPUT, PRU CAPE Red LED */
+			0x198 0x2e	/* mcasp0_axr0, OMAP_MUX_MODE5 | AM33XX_PIN_OUTPUT, PRU CAPE Orange LED */
+			0x194 0x2e	/* mcasp0_fsx, OMAP_MUX_MODE5 | AM33XX_PIN_OUTPUT, PRU CAPE Green LED */
+		>;
+	};
+};
+
+&lcdc {
+	status = "disabled";  		/* Disable HDMI due to pin mux conflicts with PRU Cape */
+};
+
+
+&mcasp0 {
+	status = "disabled";
+};
+
+&pruss {
+        pinctrl-names = "default";
+	pinctrl-0 = <&pru_cape_bone_pins>;
+};
