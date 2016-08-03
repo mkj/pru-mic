@@ -3,9 +3,6 @@
 #ifndef BULK_SAMP_H
 #define BULK_SAMP_H
 
-#define BULK_SAMP_NUM_BUFFERS          (2)
-#define BULK_SAMP_BUFFER_SIZE          (4*1024*1024)
-
 #define RPMSG_CHAN_NAME                 "bulksamp-pru"
 
 // message types
@@ -20,11 +17,15 @@
 #define BULK_SAMP_MSG_CONFIRM 40
 #define BULK_SAMP_MSG_DEBUG 41
 
+#define BULK_SAMP_MAX_NUM_BUFFERS 30
+
 struct 
 __attribute__((__packed__))
 bulk_samp_msg_buffers {
     uint8_t type;
-    uint32_t buffers[BULK_SAMP_NUM_BUFFERS];
+    uint32_t buffer_count;
+    uint32_t buffer_size;
+    uint32_t buffers[BULK_SAMP_MAX_NUM_BUFFERS];
 };
 
 struct 

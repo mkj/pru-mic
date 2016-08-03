@@ -35,6 +35,9 @@
 
 #include "../bulk_samp_common.h"
 
+#define BULK_SAMP_NUM_BUFFERS          (2)
+#define BULK_SAMP_BUFFER_SIZE          (4*1024*1024)
+
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
 #define RPMSG_BUF_SIZE				(512)
@@ -281,7 +284,9 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	struct bulk_samp_dev *prudev;
 	int minor_got;
     int i;
-    struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS };
+    struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS,
+    										.buffer_count = BULK_SAMP_NUM_BUFFERS,
+    										.buffer_size =  BULK_SAMP_BUFFER_SIZE};
     struct rproc *rp;
     struct virtio_device *vdev;
 

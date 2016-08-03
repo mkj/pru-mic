@@ -83,7 +83,9 @@
 #define PAYLOAD_SIZE (RPMSG_BUF_SIZE-16)
 uint8_t payload[PAYLOAD_SIZE];
 
-static uint8_t *out_buffers[BULK_SAMP_NUM_BUFFERS];
+static uint32_t buffer_count;
+static uint32_t buffer_size;
+static uint8_t *out_buffers[BULK_SAMP_MAX_NUM_BUFFERS];
 static uint8_t out_index;
 static int out_pos;
 
@@ -132,7 +134,7 @@ void grab_samples()
     out_pos += XFER_SIZE;
 
     /* Buffer is full, send it */
-    if (out_pos >= BULK_SAMP_BUFFER_SIZE - XFER_SIZE) {
+    if (out_pos >= buffer_size - XFER_SIZE) {
         struct bulk_samp_msg_ready *m = (void*)payload;
         m->type = BULK_SAMP_MSG_READY;
         m->buffer_index = out_index;
@@ -141,7 +143,7 @@ void grab_samples()
         m->magic = 12349876;
         pru_rpmsg_send(&transport, dst, src, payload, sizeof(struct bulk_samp_msg_ready));
         // reset buffers
-        out_index = (out_index+1) % BULK_SAMP_NUM_BUFFERS;
+        out_index = (out_index+1) % buffer_count;
         out_pos = 0;
 #ifdef TEST_CLOCK_OUT
         going = 0;
@@ -239,8 +241,10 @@ void handle_rpmsg()
                         case BULK_SAMP_MSG_BUFFERS:
                         {
                             struct bulk_samp_msg_buffers *m = (void*)payload;
+                            buffer_count = m->buffer_count;
+                            buffer_size = m->buffer_size;
                             send_message_debug("buffers", "", 1, 2, 3);
-                            for (int i = 0; i < BULK_SAMP_NUM_BUFFERS; i++)
+                            for (int i = 0; i < buffer_count; i++)
                             {
                                 out_buffers[i] = (void*)m->buffers[i];
                                 send_message_debug("buffer", "", i, (uint32_t)out_buffers[i], 0);
@@ -310,7 +314,7 @@ void setup_rpmsg()
         /* Try again */
     }
 
-    for (int i = 0; i < BULK_SAMP_NUM_BUFFERS; i++)
+    for (int i = 0; i < BULK_SAMP_MAX_NUM_BUFFERS; i++)
     {
         out_buffers[i] = 0;
     }

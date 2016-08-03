@@ -16,6 +16,7 @@
         .asg r15, rsample
         .asg r17, rcycleaddr
         ; r18-r22 are sample buffer
+        .asg r26, rcounter ; debugging counter
         .asg r27, rtmp27 ; trigger from pru1, general register
         .asg r28, rtmp28 ; triggers pru1, general register
         ; r30/r31 control
@@ -31,6 +32,8 @@
         SET       r1, r1, 0x00000003
         SBBO      &r1, r0, 0, 4
         LDI32     rcycleaddr, 0x0002200c
+
+        LDI32     rcounter, 0
 
         ldi       rindex, &r18.b0 ; base address for samples which are stored in registers r18-r22
         ldi       rindexend, &r23.b0 ; end address
@@ -95,9 +98,12 @@
         NOP
         NOP
 
-        NOP
-        NOP
-        NOP
+        ;NOP
+        ;NOP
+        ;NOP
+        mov r18, rcounter
+        mov r19, rcounter
+        add rcounter, rcounter, 1
         NOP ; 40ns/8 cycle wait done
 
         ; permute input gpio pin bits 1 2 3 7 -> 4 5 6 7

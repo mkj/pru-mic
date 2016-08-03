@@ -48,10 +48,10 @@ class decimater(object):
 		newl = s.shape[0] / self.decim
 		#return scipy.signal.resample(s, newl)
 		k = s
-		k = scipy.signal.decimate(k, 8, 30, 'fir', zero_phase=True)
+		k = scipy.signal.decimate(k, 4, 30, 'fir', zero_phase=False)
+		k = scipy.signal.decimate(k, 4, 30, 'fir', zero_phase=False)
+		k = scipy.signal.decimate(k, 8, 30, 'fir', zero_phase=False)
 		#k = scipy.signal.decimate(k, 8, 50, 'fir', zero_phase=True)
-		#k = scipy.signal.decimate(k, 4, 50, 'fir', zero_phase=True)
-		#k = scipy.signal.decimate(k, 4, 50, 'fir', zero_phase=True)
 		return k
 
 def decodestream(f, chunk):
@@ -79,9 +79,13 @@ def writewav(fn, sampbuf, rate):
 
 		w.writeframes(sampbuf)
 
+def frombytefile(f):
+	return np.fromfile(f, dtype=np.uint8)
+
 decim = 128
 
-insamps = next(demuxone(sys.stdin, 128000)) * 2 - 1
+#insamps = next(demuxone(sys.stdin, 128000)) * 2 - 1
+insamps = frombytefile(sys.stdin)
 print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
 print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
 
@@ -98,15 +102,16 @@ print("sample rate %s" % rate)
 ls = samps
 #print(ls)
 
-rms = np.sqrt(np.mean(ls**2))
-scale = 32768 / rms
 mean = np.mean(ls)
+rms = np.sqrt(np.mean((ls-mean)**2))
+scale = 32768 * 0.7 / rms
+scaled = (ls - mean) * scale
 
 print("rms %f, scale %f, mean %f" % (rms, scale, mean))
 
 #ls = ls * scale
 
-wavbuf = ls.astype('int16').tobytes()
+wavbuf = scaled.astype('int16').tobytes()
 
 with open('test.dat', 'wb') as f:
 	f.write(wavbuf)
