@@ -1,55 +1,51 @@
 import numpy as np
 import numba
 
+spec = (
+    ('int', numba.int64[:]),
+    ('comb', numba.int64[:]),
+    ('last_comb', numba.int64[:]),
+    ('last2_comb', numba.int64[:]),
+    ('last_int', numba.int64),
+    ('last2_int', numba.int64),
+    )
+
+@numba.jitclass(spec)
 class cic128(object):
     def __init__(self):
-        pass
+        self.int = np.zeros(4, np.int64)
+        self.comb = np.zeros(3, np.int64)
+        self.last_comb = np.zeros(3, np.int64)
+        self.last2_comb = np.zeros(3, np.int64)
+        self.last_int = 0
+        self.last2_int = 0
 
-    @numba.jit
-    def __call__(self, s):
-        l = s.shape[0]
-        assert l % 8 == 0
-
+    def go(self, s, out):
         # constant
         R = 128
 
-        # integrators
-        int1 = 0
-        int2 = 0
-        int3 = 0
-        int4 = 0
-
-        last_comb1 = 0
-        last_comb2 = 0
-        last_comb3 = 0
-        last2_comb1 = 0
-        last2_comb2 = 0
-        last2_comb3 = 0
-        last_int4 = 0
-        last2_int4 = 0
-
-        out = np.ndarray(l // R)
+        l = s.shape[0]
+        assert l % 8 == 0
+        assert out.shape[0] == l//R
 
         for i, x in enumerate(s):
-            int1 += x
-            int2 += int1
-            int3 += int2
-            int4 += int3
+            self.int[0] += x
+            self.int[1] += self.int[0]
+            self.int[2] += self.int[1]
+            self.int[3] += self.int[2]
             if i % R == 0:
-                comb1 = int4 - last2_int4
-                comb2 = comb1 - last2_comb1
-                comb3 = comb2 - last2_comb2
-                y = (comb3 - last2_comb3) >> 1 # XXX is >> 1 required here?
-                last2_int4 = last_int4
-                last_int4 = int4
-                last2_comb1 = last_comb1
-                last_comb1 = comb1
-                last2_comb2 = last_comb2
-                last_comb2 = comb2
-                last2_comb3 = last_comb3
-                last_comb3 = comb3
+                self.comb[0] = self.int[3] - self.last2_int
+                self.comb[1] = self.comb[0] - self.last2_comb[0]
+                self.comb[2] = self.comb[1] - self.last2_comb[1]
 
-                out[i//R] = y / 2.0**28
+                y = (self.comb[2] - self.last2_comb[2]) >> 1 # XXX is >> 1 required here?
+                out[i//R] = y
+
+                self.last2_int = self.last_int
+                self.last_int = self.int[3]
+                self.last2_comb[:] = self.last_comb[:]
+                self.last_comb[:] = self.comb[:]
+
 
         return out
 

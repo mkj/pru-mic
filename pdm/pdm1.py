@@ -95,7 +95,8 @@ insamps.tofile('i1.dat', '')
 
 #decoder = decimater(decim)
 decoder = cic.cic128()
-samps = decoder(insamps)
+samps = np.ndarray(insamps.shape[0] // 128)
+samps = decoder.go(insamps, samps)
 print(samps[:200])
 
 rate = F/decim
