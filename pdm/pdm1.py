@@ -13,14 +13,19 @@ import matplotlib.pyplot as plt
 
 import wiggle
 import cic
+import stretch
 
 
 NSTREAMS = 8
+MEG = 1024*1024
 
 TESTMIC = 2 # data2
 
 F = 4e6
 
+INBLOCK_MS = 10
+
+INCHUNK = F * INBLOCK_MS / 1000.0
 
 np.set_printoptions(threshold=np.inf)
 
@@ -65,63 +70,56 @@ def decodeone(f, chunk, decim):
     for a in demuxstream(sys.stdin, chunk):
         yield decoder(a[NSTREAMS-1-TESTMIC])
 
-def demuxone(f, chunk):
+def demuxone(f, chunk, mic):
     for a in demuxstream(sys.stdin, chunk):
-        yield a[NSTREAMS-1-TESTMIC]
+        yield a[NSTREAMS-1-mic]
 
-#for n in decodeone(sys.stdin, 128000):
-#   print(n)
-
-def writewav(fn, sampbuf, rate):
-    with wave.open(fn, 'wb') as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-
-        w.writeframes(sampbuf)
+def openwav(fn, rate):
+    w = wave.open(fn, 'wb')
+    w.setnchannels(1)
+    w.setsampwidth(2)
+    w.setframerate(rate)
+    return w
 
 def frombytefile(f):
     return np.fromfile(f, dtype=np.uint8)
 
-decim = 128
+DECIM = 128
+WAVDIV = 1
 
-insamps = next(demuxone(sys.stdin, 20 * 1<<20)) * 2 - 1
-#insamps = frombytefile(sys.stdin)
-print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
-print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
+rate = F/DECIM
+newrate = rate / WAVDIV
+w = openwav('out1.wav', newrate)
+decoder = cic.cic_n4m2(DECIM)
 
-print(insamps[:200])
-insamps.tofile('i1.dat', '')
+ins = demuxone(sys.stdin, 1*MEG, TESTMIC)
+for chunk, insamps in enumerate(ins):
+    first = (chunk == 0)
 
-#decoder = decimater(decim)
-decoder = cic.cic128()
-samps = np.ndarray(insamps.shape[0] // 128)
-samps = decoder.go(insamps, samps)
-print(samps[:200])
+    if first:
+        print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
+        print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
+        print("sample rate %s" % rate)
+        print("new rate %f" % newrate)
 
-rate = F/decim
-print("sample rate %s" % rate)
+    l = insamps.shape[0]
+    outsamps = np.ndarray(l // DECIM)
+    decoder.go(insamps, outsamps)
 
-#ls = np.sign(samps) * np.log(np.abs(samps))
-ls = samps
-#print(ls)
+    ls = outsamps
+    #ls = np.sign(outsamps) * np.log(np.abs(outsamps))
 
-mean = np.mean(ls)
-rms = np.sqrt(np.mean((ls-mean)**2))
-scale = 32768 * 0.2 / rms
-scaled = (ls - mean) * scale
+    mean = np.mean(ls)
+    rms = np.sqrt(np.mean((ls-mean)**2))
+    scale = 32768 * 0.2 / rms
+    scaled = (ls - mean) * scale
 
-print("rms %f, scale %f, mean %f" % (rms, scale, mean))
+    if first:
+        print("rms %f, scale %f, mean %f" % (rms, scale, mean))
 
-#ls = ls * scale
+    wavbuf = scaled.astype('int16').tobytes()
+    w.writeframes(wavbuf)
 
-wavbuf = scaled.astype('int16').tobytes()
-
-with open('test.dat', 'wb') as f:
-    f.write(wavbuf)
-
-writewav('out1.wav', wavbuf, rate)
-
-fig = plt.figure(1)
-plt.plot(ls)
-plt.show()
+#fig = plt.figure(1)
+#plt.plot(ls)
+#plt.show()
