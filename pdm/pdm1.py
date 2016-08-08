@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 
 import wiggle
 import cic
-import stretch
 
 
 NSTREAMS = 8
@@ -84,8 +83,9 @@ def openwav(fn, rate):
 def frombytefile(f):
     return np.fromfile(f, dtype=np.uint8)
 
-DECIM = 128
-WAVDIV = 1
+SCALEBOOST = 2
+DECIM = 64
+WAVDIV = 8
 
 rate = F/DECIM
 newrate = rate / WAVDIV
@@ -99,8 +99,9 @@ for chunk, insamps in enumerate(ins):
     if first:
         print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
         print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
-        print("sample rate %s" % rate)
-        print("new rate %f" % newrate)
+        maxamp = decoder.getmaxamp()
+        maxbits = np.log2(maxamp)
+        print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f" % (newrate, rate, maxbits, maxamp, DECIM, WAVDIV))
 
     l = insamps.shape[0]
     outsamps = np.ndarray(l // DECIM)
@@ -111,11 +112,14 @@ for chunk, insamps in enumerate(ins):
 
     mean = np.mean(ls)
     rms = np.sqrt(np.mean((ls-mean)**2))
-    scale = 32768 * 0.2 / rms
-    scaled = (ls - mean) * scale
+    scale = 2**15
+    scale *= SCALEBOOST
+    scaled = ls * scale
+    maxabs = np.max(np.abs(ls))
+    minabs = np.min(np.abs(ls))
 
     if first:
-        print("rms %f, scale %f, mean %f" % (rms, scale, mean))
+        print("rms %f, scale %f, mean %f maxabs %f minabs %f" % (rms, scale, mean, maxabs, minabs))
 
     wavbuf = scaled.astype('int16').tobytes()
     w.writeframes(wavbuf)
