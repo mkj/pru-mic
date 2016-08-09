@@ -5,6 +5,7 @@ import sys
 import itertools
 import wave
 import io
+import argparse
 
 import scipy.signal
 import numpy as np
@@ -83,47 +84,75 @@ def openwav(fn, rate):
 def frombytefile(f):
     return np.fromfile(f, dtype=np.uint8)
 
-SCALEBOOST = 2
-DECIM = 64
-WAVDIV = 8
+def run_cic1(inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
-rate = F/DECIM
-newrate = rate / WAVDIV
-w = openwav('out1.wav', newrate)
-decoder = cic.cic_n4m2(DECIM)
+    rate = F/decim
+    newrate = rate / wavdiv
+    if wavfn:
+        w = openwav(wavfn, newrate)
+    else:
+        w = None
+    decoder = cic.cic_n4m2(decim)
 
-ins = demuxone(sys.stdin, 1*MEG, TESTMIC)
-for chunk, insamps in enumerate(ins):
-    first = (chunk == 0)
+    ins = demuxone(sys.stdin, 1*MEG, TESTMIC)
+    for chunk, insamps in enumerate(ins):
+        first = (chunk == 0)
 
-    if first:
-        print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
-        print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
-        maxamp = decoder.getmaxamp()
-        maxbits = np.log2(maxamp)
-        print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f" % (newrate, rate, maxbits, maxamp, DECIM, WAVDIV))
+        if first:
+            print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
+            print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
+            maxamp = decoder.getmaxamp()
+            maxbits = np.log2(maxamp)
+            print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f" % (newrate, rate, maxbits, maxamp, decim, wavdiv))
 
-    l = insamps.shape[0]
-    outsamps = np.ndarray(l // DECIM)
-    decoder.go(insamps, outsamps)
+        l = insamps.shape[0]
+        outsamps = np.ndarray(l // decim)
+        decoder.go(insamps, outsamps)
 
-    ls = outsamps
-    #ls = np.sign(outsamps) * np.log(np.abs(outsamps))
+        ls = outsamps
+        #ls = np.sign(outsamps) * np.log(np.abs(outsamps))
 
-    mean = np.mean(ls)
-    rms = np.sqrt(np.mean((ls-mean)**2))
-    scale = 2**15
-    scale *= SCALEBOOST
-    scaled = ls * scale
-    maxabs = np.max(np.abs(ls))
-    minabs = np.min(np.abs(ls))
+        mean = np.mean(ls)
+        rms = np.sqrt(np.mean((ls-mean)**2))
+        scale = 2**15
+        scale *= scaleboost
+        scaled = ls * scale
+        maxabs = np.max(np.abs(ls))
+        minabs = np.min(np.abs(ls))
 
-    if first:
-        print("rms %f, scale %f, mean %f maxabs %f minabs %f" % (rms, scale, mean, maxabs, minabs))
+        if first:
+            print("rms %f, scale %f, mean %f maxabs %f minabs %f" % (rms, scale, mean, maxabs, minabs))
+            if doplot:
+                fig = plt.figure(1)
+                plt.plot(ls)
+                plt.show()
 
-    wavbuf = scaled.astype('int16').tobytes()
-    w.writeframes(wavbuf)
+        if w:
+            wavbuf = scaled.astype('int16').tobytes()
+            w.writeframes(wavbuf)
 
-#fig = plt.figure(1)
-#plt.plot(ls)
-#plt.show()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--decim', type=int, default=128)
+    parser.add_argument('-w', '--wavdiv', type=float, default=1)
+    parser.add_argument('-s', '--scaleboost', type=int, default=2)
+    parser.add_argument('-o', '--output', type=str, metavar='wavfile', nargs='?')
+    parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
+    parser.add_argument('-p', '--plot', action='store_true')
+    args = parser.parse_args()
+
+    if args.input:
+        f = open(args.input, 'r')
+    else:
+        f = sys.stdin
+
+    if args.output and not args.output.endswith('.wav'):
+        args.output += '.wav'
+
+
+    run_cic1(f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
+
+
+if __name__ == '__main__':
+    main()
+
