@@ -68,14 +68,14 @@ struct bulk_samp_dev {
 	dev_t devt;
 	wait_queue_head_t wait_list;
 
-	void* sample_buffers[BULK_SAMP_NUM_BUFFERS];
+	void *sample_buffers[BULK_SAMP_NUM_BUFFERS];
 	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
-    // XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
-    int read_idx;
-    size_t read_off; // index into current sample_buffers[read_idx]
-    int write_idx;
+	// XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
+	int read_idx;
+	size_t read_off;	// index into current sample_buffers[read_idx]
+	int write_idx;
 
-    bool warned_full;
+	bool warned_full;
 };
 
 static struct class *bulk_samp_class;
@@ -83,17 +83,19 @@ static dev_t bulk_samp_devt;
 static DEFINE_MUTEX(bulk_samp_lock);
 static DEFINE_IDR(bulk_samp_minors);
 
-static int bulk_samp_is_empty(struct bulk_samp_dev *d) {
-    return d->write_idx == d->read_idx;
+static int bulk_samp_is_empty(struct bulk_samp_dev *d)
+{
+	return d->write_idx == d->read_idx;
 }
 
-static int bulk_samp_is_full(struct bulk_samp_dev *d) {
-    return (d->write_idx+1)%BULK_SAMP_NUM_BUFFERS == d->read_idx;
+static int bulk_samp_is_full(struct bulk_samp_dev *d)
+{
+	return (d->write_idx + 1) % BULK_SAMP_NUM_BUFFERS == d->read_idx;
 }
 
 static int bulk_samp_open(struct inode *inode, struct file *filp)
 {
-    struct bulk_samp_msg_start msg = { .type = BULK_SAMP_MSG_START };
+	struct bulk_samp_msg_start msg = {.type = BULK_SAMP_MSG_START };
 	struct bulk_samp_dev *prudev;
 	int ret = -EACCES;
 
@@ -111,34 +113,34 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 		dev_err(prudev->dev, "Device already open\n");
 	}
 
-    prudev->warned_full = false;
-    prudev->read_off = 0;
-    prudev->read_idx = 0;
-    prudev->read_off = 0;
-    smp_wmb();
+	prudev->warned_full = false;
+	prudev->read_off = 0;
+	prudev->read_idx = 0;
+	prudev->read_off = 0;
+	smp_wmb();
 
-    printk("bulk_samp open\n");
+	printk("bulk_samp open\n");
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send start failed: %d\n", ret);
-    }
+	}
 
 	return ret;
 }
 
 static int bulk_samp_release(struct inode *inode, struct file *filp)
 {
-    struct bulk_samp_msg_stop msg = { .type = BULK_SAMP_MSG_STOP };
+	struct bulk_samp_msg_stop msg = {.type = BULK_SAMP_MSG_STOP };
 	struct bulk_samp_dev *prudev;
-    int ret;
+	int ret;
 
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
-    printk("bulk_samp stop\n");
+	printk("bulk_samp stop\n");
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
-    }
+	}
 
 	mutex_lock(&bulk_samp_lock);
 	prudev->locked = false;
@@ -146,8 +148,8 @@ static int bulk_samp_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static ssize_t bulk_samp_read(struct file *filp, char __user *buf,
-			      size_t count, loff_t *f_pos)
+static ssize_t bulk_samp_read(struct file *filp, char __user * buf,
+			      size_t count, loff_t * f_pos)
 {
 	int ret;
 	size_t length;
@@ -163,16 +165,19 @@ static ssize_t bulk_samp_read(struct file *filp, char __user *buf,
 	if (ret)
 		return -EINTR;
 
-    length = min(BULK_SAMP_BUFFER_SIZE - prudev->read_off, count);
-    ret = copy_to_user(buf, prudev->sample_buffers[prudev->read_idx]+prudev->read_off, length);
+	length = min(BULK_SAMP_BUFFER_SIZE - prudev->read_off, count);
+	ret =
+	    copy_to_user(buf,
+			 prudev->sample_buffers[prudev->read_idx] +
+			 prudev->read_off, length);
 
-    prudev->read_off += (length - ret);
-    if (prudev->read_off == BULK_SAMP_BUFFER_SIZE) {
-        prudev->read_idx++;
-        prudev->read_idx %= BULK_SAMP_NUM_BUFFERS;
-        prudev->read_off = 0;
-        smp_wmb();
-    }
+	prudev->read_off += (length - ret);
+	if (prudev->read_off == BULK_SAMP_BUFFER_SIZE) {
+		prudev->read_idx++;
+		prudev->read_idx %= BULK_SAMP_NUM_BUFFERS;
+		prudev->read_off = 0;
+		smp_wmb();
+	}
 
 	return ret ? ret : length;
 }
@@ -203,80 +208,84 @@ static const struct file_operations bulk_samp_fops = {
 	.poll = bulk_samp_poll,
 };
 
-static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len) 
+static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 {
 	struct bulk_samp_dev *prudev;
-    struct bulk_samp_msg_ready *msg = data;
+	struct bulk_samp_msg_ready *msg = data;
 	prudev = dev_get_drvdata(&rpdev->dev);
 
-    /* XXX handle 'msg' here, validate index etc */
+	/* XXX handle 'msg' here, validate index etc */
 
 	if (bulk_samp_is_full(prudev)) {
 		if (!prudev->warned_full) {
-			dev_err(&rpdev->dev, "Can't keep up with data from PRU!\n");
+			dev_err(&rpdev->dev,
+				"Can't keep up with data from PRU!\n");
 			prudev->warned_full = true;
 		}
 		return;
 	}
 
-    prudev->write_idx = (prudev->write_idx+1) % BULK_SAMP_NUM_BUFFERS;
-    smp_wmb();
+	prudev->write_idx = (prudev->write_idx + 1) % BULK_SAMP_NUM_BUFFERS;
+	smp_wmb();
 
 	wake_up_interruptible(&prudev->wait_list);
 }
 
-static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len) 
+static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len)
 {
-    struct bulk_samp_msg_confirm *msg = data;
-    
-    printk("bulk_samp: got confirm for message type %d\n", (int)msg->confirm_type);
+	struct bulk_samp_msg_confirm *msg = data;
+
+	printk("bulk_samp: got confirm for message type %d\n",
+	       (int)msg->confirm_type);
 }
 
-static void handle_msg_debug(struct rpmsg_channel *rpdev, void *data, int len) 
+static void handle_msg_debug(struct rpmsg_channel *rpdev, void *data, int len)
 {
-    struct bulk_samp_msg_debug *msg = data;
+	struct bulk_samp_msg_debug *msg = data;
 
-    printk("bulk_samp debug: %s %s %u %u %u\n",
-    	msg->str1, msg->str2, msg->num1, msg->num2, msg->num3);
+	printk("bulk_samp debug: %s %s %u %u %u\n",
+	       msg->str1, msg->str2, msg->num1, msg->num2, msg->num3);
 }
 
 static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			 void *priv, u32 src)
 {
-    char type;
+	char type;
 
-    if (len < 1) {
+	if (len < 1) {
 		dev_err(&rpdev->dev, "Short message from PRU!\n");
 		return;
-    }
-    
-    type = *(char*)data;
+	}
 
-    switch (type) {
-        case BULK_SAMP_MSG_READY:
-            handle_msg_ready(rpdev, data, len);
-            break;
-        case BULK_SAMP_MSG_CONFIRM:
-            handle_msg_confirm(rpdev, data, len);
-            break;
-        case BULK_SAMP_MSG_DEBUG:
-            handle_msg_debug(rpdev, data, len);
-            break;
-        default:
-            dev_err(&rpdev->dev, "Unknown message type %d from PRU, length %d\n", type, len);
-    }
+	type = *(char *)data;
+
+	switch (type) {
+	case BULK_SAMP_MSG_READY:
+		handle_msg_ready(rpdev, data, len);
+		break;
+	case BULK_SAMP_MSG_CONFIRM:
+		handle_msg_confirm(rpdev, data, len);
+		break;
+	case BULK_SAMP_MSG_DEBUG:
+		handle_msg_debug(rpdev, data, len);
+		break;
+	default:
+		dev_err(&rpdev->dev,
+			"Unknown message type %d from PRU, length %d\n", type,
+			len);
+	}
 }
 
 /* copypaste from rpmsg_rpc.c */
 static struct rproc *rpdev_to_rproc(struct rpmsg_channel *rpdev)
 {
-    struct virtio_device *vdev;
+	struct virtio_device *vdev;
 
-    vdev = rpmsg_get_virtio_dev(rpdev);
-    if (!vdev)
-        return NULL;
+	vdev = rpmsg_get_virtio_dev(rpdev);
+	if (!vdev)
+		return NULL;
 
-    return rproc_vdev_to_rproc_safe(vdev);
+	return rproc_vdev_to_rproc_safe(vdev);
 }
 
 static int bulk_samp_probe(struct rpmsg_channel *rpdev)
@@ -284,15 +293,16 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	int ret;
 	struct bulk_samp_dev *prudev;
 	int minor_got;
-    int i;
-    struct bulk_samp_msg_buffers buf_msg = { .type = BULK_SAMP_MSG_BUFFERS,
-    										.buffer_count = BULK_SAMP_NUM_BUFFERS,
-    										.buffer_size =  BULK_SAMP_BUFFER_SIZE};
-    struct rproc *rp;
-    struct virtio_device *vdev;
+	int i;
+	struct bulk_samp_msg_buffers buf_msg = {.type = BULK_SAMP_MSG_BUFFERS,
+		.buffer_count = BULK_SAMP_NUM_BUFFERS,
+		.buffer_size = BULK_SAMP_BUFFER_SIZE
+	};
+	struct rproc *rp;
+	struct virtio_device *vdev;
 
-    printk("bulk_samp driver - Matt Johnston <matt@ucc.asn.au>\n");
-    rp = rpdev_to_rproc(rpdev);
+	printk("bulk_samp driver - Matt Johnston <matt@ucc.asn.au>\n");
+	rp = rpdev_to_rproc(rpdev);
 
 	prudev = devm_kzalloc(&rpdev->dev, sizeof(*prudev), GFP_KERNEL);
 	if (!prudev)
@@ -304,7 +314,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	mutex_unlock(&bulk_samp_lock);
 	if (minor_got < 0) {
 		ret = minor_got;
-		dev_err(&rpdev->dev, "Failed to get a minor number for the bulk_samp device: %d\n",
+		dev_err(&rpdev->dev,
+			"Failed to get a minor number for the bulk_samp device: %d\n",
 			ret);
 		goto fail_alloc_minor;
 	}
@@ -315,7 +326,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	prudev->cdev.owner = THIS_MODULE;
 	ret = cdev_add(&prudev->cdev, prudev->devt, 1);
 	if (ret) {
-		dev_err(&rpdev->dev, "Unable to add cdev for the bulk_samp device\n");
+		dev_err(&rpdev->dev,
+			"Unable to add cdev for the bulk_samp device\n");
 		goto fail_add_cdev;
 	}
 
@@ -331,24 +343,29 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 
 	prudev->rpdev = rpdev;
 
-    vdev = rpmsg_get_virtio_dev(rpdev);
+	vdev = rpmsg_get_virtio_dev(rpdev);
 
-    /* Allocate large buffers for data transfer. */
+	/* Allocate large buffers for data transfer. */
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
-        /* TODO: for better performance this could use streaming DMA but
-         * for now we use the simpler solution of coherent buffers */
-		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev, 
-				BULK_SAMP_BUFFER_SIZE, &prudev->sample_buffers_phys[i], GFP_KERNEL);
-		if (!prudev->sample_buffers[i]) { 
-			dev_err(&rpdev->dev, "Unable to allocate sample buffers for the bulk_samp device\n");
+		/* TODO: for better performance this could use streaming DMA but
+		 * for now we use the simpler solution of coherent buffers */
+		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev,
+							       BULK_SAMP_BUFFER_SIZE,
+							       &prudev->
+							       sample_buffers_phys
+							       [i], GFP_KERNEL);
+		if (!prudev->sample_buffers[i]) {
+			dev_err(&rpdev->dev,
+				"Unable to allocate sample buffers for the bulk_samp device\n");
 			goto fail_alloc_buffers;
 		}
-        /* clear it to avoid bugs exposing kernel memory */
-        memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
+		/* clear it to avoid bugs exposing kernel memory */
+		memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
 
-        printk("bulk_samp buffer %d, virt %p, phys %pad\n",
-        	i, prudev->sample_buffers[i], &prudev->sample_buffers_phys[i]);
-        buf_msg.buffers[i] = prudev->sample_buffers_phys[i];
+		printk("bulk_samp buffer %d, virt %p, phys %pad\n",
+		       i, prudev->sample_buffers[i],
+		       &prudev->sample_buffers_phys[i]);
+		buf_msg.buffers[i] = prudev->sample_buffers_phys[i];
 	}
 
 	init_waitqueue_head(&prudev->wait_list);
@@ -358,19 +375,20 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	dev_info(&rpdev->dev, "new bulk_samp device: /dev/bulk_samp%d",
 		 rpdev->dst);
 
-    printk("bulk_samp buffers\n");
+	printk("bulk_samp buffers\n");
 	ret = rpmsg_send(prudev->rpdev, &buf_msg, sizeof(buf_msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send buf_msg failed: %d\n", ret);
-    }
+	}
 
 	return 0;
 
 fail_alloc_buffers:
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
 		if (prudev->sample_buffers[i]) {
-			dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
-                    prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
+			dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE,
+					  prudev->sample_buffers[i],
+					  prudev->sample_buffers_phys[i]);
 		}
 	}
 	device_destroy(bulk_samp_class, prudev->devt);
@@ -387,13 +405,14 @@ fail_alloc_minor:
 static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 {
 	struct bulk_samp_dev *prudev;
-    int i;
+	int i;
 
 	prudev = dev_get_drvdata(&rpdev->dev);
 
 	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
-        dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE, 
-                prudev->sample_buffers[i], prudev->sample_buffers_phys[i]);
+		dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE,
+				  prudev->sample_buffers[i],
+				  prudev->sample_buffers_phys[i]);
 	}
 	device_destroy(bulk_samp_class, prudev->devt);
 	cdev_del(&prudev->cdev);
@@ -404,18 +423,19 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 
 /* .name matches on RPMsg Channels and causes a probe */
 static const struct rpmsg_device_id rpmsg_driver_pru_id_table[] = {
-	{ .name	= RPMSG_CHAN_NAME },
-	{ },
+	{.name = RPMSG_CHAN_NAME},
+	{},
 };
+
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_pru_id_table);
 
 static struct rpmsg_driver bulk_samp_driver = {
-	.drv.name	= KBUILD_MODNAME,
-	.drv.owner	= THIS_MODULE,
-	.id_table	= rpmsg_driver_pru_id_table,
-	.probe		= bulk_samp_probe,
-	.callback	= bulk_samp_cb,
-	.remove		= bulk_samp_remove,
+	.drv.name = KBUILD_MODNAME,
+	.drv.owner = THIS_MODULE,
+	.id_table = rpmsg_driver_pru_id_table,
+	.probe = bulk_samp_probe,
+	.callback = bulk_samp_cb,
+	.remove = bulk_samp_remove,
 };
 
 static int __init bulk_samp_init(void)
