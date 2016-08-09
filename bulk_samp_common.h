@@ -17,7 +17,13 @@
 #define BULK_SAMP_MSG_CONFIRM 40
 #define BULK_SAMP_MSG_DEBUG 41
 
-#define BULK_SAMP_MAX_NUM_BUFFERS 30
+// limited by max rpmsg size for bulk_samp_msg_buffers
+#define BULK_SAMP_MAX_NUM_BUFFERS 120
+
+// must match sizes of xin/xout in pru code
+#define BULK_SAMP_XFER_SIZE 32
+
+// maximum message size is RPMSG_BUF_SIZE-16 = 496
 
 struct 
 __attribute__((__packed__))

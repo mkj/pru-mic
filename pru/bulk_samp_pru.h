@@ -6,7 +6,8 @@
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
 
-#define XFER_SIZE 32
+// see bulk_samp_common.h
+#define XFER_SIZE BULK_SAMP_XFER_SIZE
 
 #define PRU0_PRU1_EVT (16)
 #define PRU0_PRU1_TRIGGER (__R31 = (PRU0_PRU1_EVT - 16) | (1 << 5))

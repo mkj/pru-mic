@@ -35,9 +35,12 @@
 
 #include "../bulk_samp_common.h"
 
-#define BULK_SAMP_NUM_BUFFERS          (2)
-// buffer size must be a multiple of PRU's XFER_SIZE (currently 32)
-#define BULK_SAMP_BUFFER_SIZE          (4*1024*1024)
+static const int max_buffer = 10*1024*1024;
+static int num_buffers = 10;
+module_param(num_buffers, int, 0444);
+
+static int buffer_size = 100*1024*1024;
+module_param(buffer_size, int, 0444);
 
 #define PRU_MAX_DEVICES				(8)
 /* Matches the definition in virtio_rpmsg_bus.c */
@@ -72,7 +75,7 @@ struct bulk_samp_dev {
 	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
 	// XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
 	int read_idx;
-	size_t read_off;	// index into current sample_buffers[read_idx]
+	size_t read_off; // index into current sample_buffers[read_idx]
 	int write_idx;
 
 	bool warned_full;
@@ -90,7 +93,7 @@ static int bulk_samp_is_empty(struct bulk_samp_dev *d)
 
 static int bulk_samp_is_full(struct bulk_samp_dev *d)
 {
-	return (d->write_idx + 1) % BULK_SAMP_NUM_BUFFERS == d->read_idx;
+	return (d->write_idx + 1) % num_buffers == d->read_idx;
 }
 
 static int bulk_samp_open(struct inode *inode, struct file *filp)
@@ -165,16 +168,16 @@ static ssize_t bulk_samp_read(struct file *filp, char __user * buf,
 	if (ret)
 		return -EINTR;
 
-	length = min(BULK_SAMP_BUFFER_SIZE - prudev->read_off, count);
+	length = min(buffer_size - prudev->read_off, count);
 	ret =
 	    copy_to_user(buf,
 			 prudev->sample_buffers[prudev->read_idx] +
 			 prudev->read_off, length);
 
 	prudev->read_off += (length - ret);
-	if (prudev->read_off == BULK_SAMP_BUFFER_SIZE) {
+	if (prudev->read_off == buffer_size) {
 		prudev->read_idx++;
-		prudev->read_idx %= BULK_SAMP_NUM_BUFFERS;
+		prudev->read_idx %= num_buffers;
 		prudev->read_off = 0;
 		smp_wmb();
 	}
@@ -225,7 +228,7 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 		return;
 	}
 
-	prudev->write_idx = (prudev->write_idx + 1) % BULK_SAMP_NUM_BUFFERS;
+	prudev->write_idx = (prudev->write_idx + 1) % num_buffers;
 	smp_wmb();
 
 	wake_up_interruptible(&prudev->wait_list);
@@ -295,8 +298,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	int minor_got;
 	int i;
 	struct bulk_samp_msg_buffers buf_msg = {.type = BULK_SAMP_MSG_BUFFERS,
-		.buffer_count = BULK_SAMP_NUM_BUFFERS,
-		.buffer_size = BULK_SAMP_BUFFER_SIZE
+		.buffer_count = num_buffers,
+		.buffer_size = buffer_size
 	};
 	struct rproc *rp;
 	struct virtio_device *vdev;
@@ -346,11 +349,11 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	vdev = rpmsg_get_virtio_dev(rpdev);
 
 	/* Allocate large buffers for data transfer. */
-	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
+	for (i = 0; i < num_buffers; i++) {
 		/* TODO: for better performance this could use streaming DMA but
 		 * for now we use the simpler solution of coherent buffers */
 		prudev->sample_buffers[i] = dma_alloc_coherent(prudev->dev,
-							       BULK_SAMP_BUFFER_SIZE,
+							       buffer_size,
 							       &prudev->
 							       sample_buffers_phys
 							       [i], GFP_KERNEL);
@@ -360,7 +363,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 			goto fail_alloc_buffers;
 		}
 		/* clear it to avoid bugs exposing kernel memory */
-		memset(prudev->sample_buffers[i], 0x88, BULK_SAMP_BUFFER_SIZE);
+		memset(prudev->sample_buffers[i], 0x88, buffer_size);
 
 		printk("bulk_samp buffer %d, virt %p, phys %pad\n",
 		       i, prudev->sample_buffers[i],
@@ -384,9 +387,9 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 	return 0;
 
 fail_alloc_buffers:
-	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
+	for (i = 0; i < num_buffers; i++) {
 		if (prudev->sample_buffers[i]) {
-			dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE,
+			dma_free_coherent(prudev->dev, buffer_size,
 					  prudev->sample_buffers[i],
 					  prudev->sample_buffers_phys[i]);
 		}
@@ -409,8 +412,8 @@ static void bulk_samp_remove(struct rpmsg_channel *rpdev)
 
 	prudev = dev_get_drvdata(&rpdev->dev);
 
-	for (i = 0; i < BULK_SAMP_NUM_BUFFERS; i++) {
-		dma_free_coherent(prudev->dev, BULK_SAMP_BUFFER_SIZE,
+	for (i = 0; i < num_buffers; i++) {
+		dma_free_coherent(prudev->dev, buffer_size,
 				  prudev->sample_buffers[i],
 				  prudev->sample_buffers_phys[i]);
 	}
@@ -461,6 +464,24 @@ static int __init bulk_samp_init(void)
 		pr_err("Unable to register rpmsg driver");
 		goto fail_register_rpmsg_driver;
 	}
+
+	if (buffer_size % BULK_SAMP_XFER_SIZE != 0) {
+		pr_err("buffer_size=%d must be a multiple of %d\n", 
+			buffer_size, BULK_SAMP_XFER_SIZE);
+		goto fail_register_rpmsg_driver;
+	}
+
+	if (buffer_size > max_buffer) {
+		pr_err("buffer_size=%d must be < %d\n", buffer_size, max_buffer);
+		goto fail_register_rpmsg_driver;
+	}
+
+	if (num_buffers > BULK_SAMP_MAX_NUM_BUFFERS || num_buffers < 2) {
+		pr_err("num_buffers=%d must be < %d\n"
+			num_buffers, BULK_SAMP_MAX_NUM_BUFFERS);
+		goto fail_register_rpmsg_driver;
+	}
+
 
 	return 0;
 
