@@ -39,7 +39,7 @@ static const int max_buffer = 10*1024*1024;
 static int num_buffers = 10;
 module_param(num_buffers, int, 0444);
 
-static int buffer_size = 100*1024*1024;
+static int buffer_size = 100*1024;
 module_param(buffer_size, int, 0444);
 
 #define PRU_MAX_DEVICES				(8)
@@ -71,8 +71,8 @@ struct bulk_samp_dev {
 	dev_t devt;
 	wait_queue_head_t wait_list;
 
-	void *sample_buffers[BULK_SAMP_NUM_BUFFERS];
-	dma_addr_t sample_buffers_phys[BULK_SAMP_NUM_BUFFERS];
+	void *sample_buffers[BULK_SAMP_MAX_NUM_BUFFERS];
+	dma_addr_t sample_buffers_phys[BULK_SAMP_MAX_NUM_BUFFERS];
 	// XXX - do we need locking? Probably! Using smp_wmb() memory barrier.
 	int read_idx;
 	size_t read_off; // index into current sample_buffers[read_idx]
@@ -139,7 +139,7 @@ static int bulk_samp_release(struct inode *inode, struct file *filp)
 
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
-	printk("bulk_samp stop\n");
+	printk("bulk_samp stop. warned_full %d\n", prudev->warned_full);
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
@@ -214,7 +214,7 @@ static const struct file_operations bulk_samp_fops = {
 static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 {
 	struct bulk_samp_dev *prudev;
-	struct bulk_samp_msg_ready *msg = data;
+	//struct bulk_samp_msg_ready *msg = data;
 	prudev = dev_get_drvdata(&rpdev->dev);
 
 	/* XXX handle 'msg' here, validate index etc */
@@ -445,6 +445,24 @@ static int __init bulk_samp_init(void)
 {
 	int ret;
 
+    ret = -EINVAL;
+	if (buffer_size % BULK_SAMP_XFER_SIZE != 0) {
+		pr_err("buffer_size=%d must be a multiple of %d\n", 
+			buffer_size, BULK_SAMP_XFER_SIZE);
+		goto fail_create_class;
+	}
+
+	if (buffer_size > max_buffer) {
+		pr_err("buffer_size=%d must be < %d\n", buffer_size, max_buffer);
+		goto fail_create_class;
+	}
+
+	if (num_buffers > BULK_SAMP_MAX_NUM_BUFFERS || num_buffers < 2) {
+		pr_err("num_buffers=%d must be < %d\n",
+			num_buffers, BULK_SAMP_MAX_NUM_BUFFERS);
+		goto fail_create_class;
+	}
+
 	bulk_samp_class = class_create(THIS_MODULE, "bulk_samp");
 	if (IS_ERR(bulk_samp_class)) {
 		pr_err("Unable to create class\n");
@@ -464,24 +482,6 @@ static int __init bulk_samp_init(void)
 		pr_err("Unable to register rpmsg driver");
 		goto fail_register_rpmsg_driver;
 	}
-
-	if (buffer_size % BULK_SAMP_XFER_SIZE != 0) {
-		pr_err("buffer_size=%d must be a multiple of %d\n", 
-			buffer_size, BULK_SAMP_XFER_SIZE);
-		goto fail_register_rpmsg_driver;
-	}
-
-	if (buffer_size > max_buffer) {
-		pr_err("buffer_size=%d must be < %d\n", buffer_size, max_buffer);
-		goto fail_register_rpmsg_driver;
-	}
-
-	if (num_buffers > BULK_SAMP_MAX_NUM_BUFFERS || num_buffers < 2) {
-		pr_err("num_buffers=%d must be < %d\n"
-			num_buffers, BULK_SAMP_MAX_NUM_BUFFERS);
-		goto fail_register_rpmsg_driver;
-	}
-
 
 	return 0;
 
