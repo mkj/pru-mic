@@ -30,6 +30,8 @@ driver:
 
 	16384 buffer_size, 100 num_buffer seems safe
 
+	socat TCP-LISTEN:9999,fork EXEC:"./bitex 2 /dev/bulk_samp31"
+
 
 
 5dump:

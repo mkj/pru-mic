@@ -24,8 +24,7 @@ TESTMIC = 2 # data2
 F = 4e6
 
 INBLOCK_MS = 10
-
-INCHUNK = F * INBLOCK_MS / 1000.0
+INCHUNK = int(F * INBLOCK_MS / 1000.0)
 
 np.set_printoptions(threshold=np.inf)
 
@@ -38,10 +37,20 @@ def demux(b):
 def demuxstream(f, chunk):
     """ yields arrays of bits """
     while True:
-        r = np.fromfile(f, count=chunk, dtype=np.uint8)
-        if r.size != chunk:
+        bl = f.read(chunk)
+        if len(bl) != chunk:
             return
+        r = np.fromstring(bl, count=chunk, dtype=np.uint8)
         yield demux(r)
+
+def bitexstream(f, chunk):
+    """ yields arrays of bits """
+    while True:
+        bl = f.read(chunk)
+        if len(bl) != chunk:
+            return
+        r = np.fromstring(bl, count=chunk, dtype=np.uint8)
+        yield np.unpackbits(r)
 
 class sumdecoder(object):
     def __call__(self, s):
@@ -62,16 +71,16 @@ class decimater(object):
 
 def decodestream(f, chunk):
     decoders = [decimater() for _ in range(NSTREAMS)]
-    for a in demuxstream(sys.stdin, chunk):
+    for a in demuxstream(f, chunk):
         yield [decode(x) for (decode, x) in zip(decoders, a)]
 
 def decodeone(f, chunk, decim):
     decoder = decimater(decim)
-    for a in demuxstream(sys.stdin, chunk):
+    for a in demuxstream(f, chunk):
         yield decoder(a[NSTREAMS-1-TESTMIC])
 
 def demuxone(f, chunk, mic):
-    for a in demuxstream(sys.stdin, chunk):
+    for a in demuxstream(f, chunk):
         yield a[NSTREAMS-1-mic]
 
 def openwav(fn, rate):
@@ -84,7 +93,7 @@ def openwav(fn, rate):
 def frombytefile(f):
     return np.fromfile(f, dtype=np.uint8)
 
-def run_cic1(inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
+def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
     rate = F/decim
     newrate = rate / wavdiv
@@ -94,7 +103,11 @@ def run_cic1(inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
         w = None
     decoder = cic.cic_n4m2(decim)
 
-    ins = demuxone(sys.stdin, 1*MEG, TESTMIC)
+    if args.bitex:
+        ins = bitexstream(inf, INCHUNK//8)
+    else:
+        ins = demuxone(inf, INCHUNK, TESTMIC)
+
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
 
@@ -139,18 +152,19 @@ def main():
     parser.add_argument('-o', '--output', type=str, metavar='wavfile', nargs='?')
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
+    parser.add_argument('--bitex', help="Single bit input stream", action='store_true')
     args = parser.parse_args()
 
     if args.input:
-        f = open(args.input, 'r')
+        f = open(args.input, 'rb')
     else:
-        f = sys.stdin
+        f = sys.stdin.buffer
 
     if args.output and not args.output.endswith('.wav'):
         args.output += '.wav'
 
 
-    run_cic1(f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
+    run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
 
 
 if __name__ == '__main__':
