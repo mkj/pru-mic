@@ -78,7 +78,7 @@ struct bulk_samp_dev {
 	size_t read_off; // index into current sample_buffers[read_idx]
 	int write_idx;
 
-	bool warned_full;
+	size_t full_count;
 };
 
 static struct class *bulk_samp_class;
@@ -116,7 +116,7 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 		dev_err(prudev->dev, "Device already open\n");
 	}
 
-	prudev->warned_full = false;
+	prudev->full_count = 0;
 	prudev->read_off = 0;
 	prudev->read_idx = 0;
 	prudev->read_off = 0;
@@ -139,7 +139,7 @@ static int bulk_samp_release(struct inode *inode, struct file *filp)
 
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
-	printk("bulk_samp stop. warned_full %d\n", prudev->warned_full);
+	printk("bulk_samp stop. full count %zu\n", prudev->full_count);
 	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
@@ -220,11 +220,11 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 	/* XXX handle 'msg' here, validate index etc */
 
 	if (bulk_samp_is_full(prudev)) {
-		if (!prudev->warned_full) {
+		if (prudev->full_count == 0) {
 			dev_err(&rpdev->dev,
 				"Can't keep up with data from PRU!\n");
-			prudev->warned_full = true;
 		}
+        prudev->full_count++;
 		return;
 	}
 
