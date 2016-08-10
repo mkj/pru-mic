@@ -59,7 +59,7 @@ int main(int argc, char ** argv)
             }
         }
 
-        for (size_t i = 0, j = 0; j < outbuf.size(); i++, j++)
+        for (size_t i = 0, j = 0; j < outbuf.size(); i+=8, j++)
         {
             outbuf[j] = (inbuf[i] & bitmask) >> bitex << 7
                 | (inbuf[i+1] & bitmask) >> bitex << 6
