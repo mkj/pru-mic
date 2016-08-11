@@ -6,16 +6,15 @@ import itertools
 import wave
 import io
 import argparse
-import queue
 
 import scipy.signal
 import numpy as np
 import numba
 import matplotlib.pyplot as plt
-import sounddevice
 
 import wiggle
 import cic
+import player
 
 
 NSTREAMS = 8
@@ -30,46 +29,6 @@ INBLOCK_MS = 5
 DEFAULTBOOST=2
 
 np.set_printoptions(threshold=np.inf)
-
-class Player(object):
-    def __init__(self, rate, chunk):
-        self.stream = sounddevice.RawOutputStream(samplerate = int(rate), channels = 1,
-            callback = self._callback, dtype='int16', blocksize=chunk)
-        self.queue = queue.Queue(20)
-        self.started = False
-
-    def push(self, indata):
-        try:
-            self.queue.put_nowait(indata)
-        except queue.Full:
-            print("queue full")
-            try:
-                while True:
-                    self.queue.get_nowait()
-            except queue.Empty:
-                pass
-            return
-
-        if not self.started:
-            self.stream.start()
-            self.started = True
-
-    def _callback(self, outdata, frames, time, status):
-        if status:
-            print(status, flush=True)
-        try:
-            outdata[:] = self.queue.get_nowait()
-        except queue.Empty:
-            outdata[:] = bytearray(len(outdata))
-
-    def flush(self):
-        print("flushing")
-        with self.stream:
-            while not self.queue.empty():
-                print("sleep. queue %s" % self.queue.qsize())
-                sounddevice.sleep(1000)
-            print("flushed")
-
 
 def demux(b):
     """ demultiplexes b """
@@ -131,7 +90,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
     if args.live:
         block = inchunk // decim
-        play = Player(newrate, inchunk//decim)
+        play = player.Player(newrate, inchunk//decim)
 
     decoder = cic.cic_n4m2(decim)
 
