@@ -25,31 +25,50 @@ TESTMIC = 2 # data2
 
 F = 4e6
 
-INBLOCK_MS = 10
-INCHUNK = int(F * INBLOCK_MS / 1000.0)
+INBLOCK_MS = 5
+
+DEFAULTBOOST=2
 
 np.set_printoptions(threshold=np.inf)
 
 class Player(object):
-    def __init__(self, rate, chunk, chans=1):
-        self.stream = sounddevice.RawStream(samplerate = int(rate), channels = chans,
+    def __init__(self, rate, chunk):
+        self.stream = sounddevice.RawOutputStream(samplerate = int(rate), channels = 1,
             callback = self._callback, dtype='int16', blocksize=chunk)
-        self.queue = queue.Queue()
+        self.queue = queue.Queue(20)
+        self.started = False
 
     def push(self, indata):
-        self.queue.put(indata)
+        try:
+            self.queue.put_nowait(indata)
+        except queue.Full:
+            print("queue full")
+            try:
+                while True:
+                    self.queue.get_nowait()
+            except queue.Empty:
+                pass
+            return
 
-    def _callback(self, indata, outdata, frames, time, status):
-        print("cb")
+        if not self.started:
+            self.stream.start()
+            self.started = True
+
+    def _callback(self, outdata, frames, time, status):
         if status:
             print(status, flush=True)
-        outdata[:] = self.queue.get_nowait()
+        try:
+            outdata[:] = self.queue.get_nowait()
+        except queue.Empty:
+            outdata[:] = bytearray(len(outdata))
 
     def flush(self):
         print("flushing")
-        while not self.queue.empty():
-            sounddevice.sleep(1000)
-        print("flushed")
+        with self.stream:
+            while not self.queue.empty():
+                print("sleep. queue %s" % self.queue.qsize())
+                sounddevice.sleep(1000)
+            print("flushed")
 
 
 def demux(b):
@@ -77,23 +96,6 @@ def bitexstream(f, chunk):
             return
         r = np.fromstring(bl, count=bytechunk, dtype=np.uint8)
         yield np.unpackbits(r)
-
-class sumdecoder(object):
-    def __call__(self, s):
-        return np.sum(s)
-
-class decimater(object):
-    def __init__(self, decim=128):
-        self.decim = decim
-    def __call__(self, s):
-        newl = s.shape[0] / self.decim
-        #return scipy.signal.resample(s, newl)
-        k = s
-        k = scipy.signal.decimate(k, 4, 30, 'fir', zero_phase=False)
-        k = scipy.signal.decimate(k, 4, 30, 'fir', zero_phase=False)
-        k = scipy.signal.decimate(k, 8, 30, 'fir', zero_phase=False)
-        #k = scipy.signal.decimate(k, 8, 50, 'fir', zero_phase=True)
-        return k
 
 def decodestream(f, chunk):
     decoders = [decimater() for _ in range(NSTREAMS)]
@@ -123,16 +125,20 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
     rate = F/decim
     newrate = rate / wavdiv
+    inchunk = int(rate * INBLOCK_MS / 1000.0)*decim
+
     w = openwav(wavfn, newrate) if wavfn else None
 
-    play = Player(newrate, INCHUNK)
+    if args.live:
+        block = inchunk // decim
+        play = Player(newrate, inchunk//decim)
 
     decoder = cic.cic_n4m2(decim)
 
     if args.bitex:
-        ins = bitexstream(inf, INCHUNK)
+        ins = bitexstream(inf, inchunk)
     else:
-        ins = demuxone(inf, INCHUNK, TESTMIC)
+        ins = demuxone(inf, inchunk, TESTMIC)
 
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
@@ -142,7 +148,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
             print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
             maxamp = decoder.getmaxamp()
             maxbits = np.log2(maxamp)
-            print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f chunk %d" % (newrate, rate, maxbits, maxamp, decim, wavdiv, INCHUNK))
+            print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f chunk %d" % (newrate, rate, maxbits, maxamp, decim, wavdiv, inchunk))
 
         l = insamps.shape[0]
         outsamps = np.ndarray(l // decim)
@@ -154,7 +160,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
         mean = np.mean(ls)
         rms = np.sqrt(np.mean((ls-mean)**2))
         scale = 2**15
-        scale *= scaleboost
+        scale *= scaleboost*DEFAULTBOOST
         scaled = ls * scale
         maxabs = np.max(np.abs(ls))
         minabs = np.min(np.abs(ls))
@@ -181,7 +187,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--decim', type=int, default=128)
     parser.add_argument('-w', '--wavdiv', type=float, default=1)
-    parser.add_argument('-s', '--scaleboost', type=int, default=2)
+    parser.add_argument('-s', '--scaleboost', type=int, default=1)
     parser.add_argument('-o', '--output', type=str, metavar='wavfile', nargs='?')
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
@@ -196,6 +202,10 @@ def main():
 
     if args.output and not args.output.endswith('.wav'):
         args.output += '.wav'
+
+    if args.wavdiv != 1 and args.live:
+        print("--wavdiv doesn't make sense with --live")
+        #sys.exit(1)
 
 
     run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
