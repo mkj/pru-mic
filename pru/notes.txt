@@ -32,6 +32,8 @@ driver:
 
 	socat TCP-LISTEN:9999,fork EXEC:"./bitex 2 /dev/bulk_samp31"
 
+skip rubbish of 40960 works well
+
 
 
 5dump:

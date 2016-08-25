@@ -20,8 +20,6 @@ import player
 NSTREAMS = 8
 MEG = 1024*1024
 
-TESTMIC = 2 # data2
-
 F = 4e6
 
 INBLOCK_MS = 5
@@ -61,14 +59,14 @@ def decodestream(f, chunk):
     for a in demuxstream(f, chunk):
         yield [decode(x) for (decode, x) in zip(decoders, a)]
 
-def decodeone(f, chunk, decim):
+def decodeone(f, chunk, decim, channel):
     decoder = decimater(decim)
     for a in demuxstream(f, chunk):
-        yield decoder(a[NSTREAMS-1-TESTMIC])
+        yield decoder(a[NSTREAMS-1-channel])
 
-def demuxone(f, chunk, mic):
+def demuxone(f, chunk, channel):
     for a in demuxstream(f, chunk):
-        yield a[NSTREAMS-1-mic]
+        yield a[NSTREAMS-1-channel]
 
 def openwav(fn, rate):
     w = wave.open(fn, 'wb')
@@ -90,14 +88,16 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
     if args.live:
         block = inchunk // decim
-        play = player.Player(newrate, inchunk//decim)
+        play = player.Player(newrate, inchunk//decim, args.stream)
+    else:
+        play = None
 
     decoder = cic.cic_n4m2(decim)
 
     if args.bitex:
         ins = bitexstream(inf, inchunk)
     else:
-        ins = demuxone(inf, inchunk, TESTMIC)
+        ins = demuxone(inf, inchunk, args.channel)
 
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
@@ -151,6 +151,8 @@ def main():
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
     parser.add_argument('-l', '--live', action='store_true')
+    parser.add_argument('--stream', help="Low latency streaming, input must be realtime speed", action='store_true')
+    parser.add_argument('-c', '--channel', type=int, default=0)
     parser.add_argument('--bitex', help="Single bit input stream", action='store_true')
     args = parser.parse_args()
 
