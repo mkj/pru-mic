@@ -59,15 +59,6 @@ def decodestream(f, chunk):
     for a in demuxstream(f, chunk):
         yield [decode(x) for (decode, x) in zip(decoders, a)]
 
-def decodeone(f, chunk, decim, channel):
-    decoder = decimater(decim)
-    for a in demuxstream(f, chunk):
-        yield decoder(a[NSTREAMS-1-channel])
-
-def demuxone(f, chunk, channel):
-    for a in demuxstream(f, chunk):
-        yield a[NSTREAMS-1-channel]
-
 def openwav(fn, rate):
     w = wave.open(fn, 'wb')
     w.setnchannels(1)
@@ -92,39 +83,49 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
     else:
         play = None
 
-    decoder = cic.cic_n4m2(decim)
-
+    ns = len(args.channel)
     if args.bitex:
         ins = bitexstream(inf, inchunk)
     else:
-        ins = demuxone(inf, inchunk, args.channel)
+        ins = demuxstream(inf, inchunk)
+        ns = NSTREAMS
+
+    outsamps = np.ndarray([ns, inchunk // decim])
+    decoders = [cic.cic_n4m2(decim) for _ in args.channel]
 
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
 
-        if first:
+        if first and args.stats:
             print("insamps mean %f rms %f" % (np.mean(insamps), np.mean(insamps**2)**0.5))
             print("insamps min %f max %f" % (np.min(insamps), np.max(insamps)))
             maxamp = decoder.getmaxamp()
             maxbits = np.log2(maxamp)
             print("wav rate %f, cic rate %f, maxbits %.1f, maxamp %f DECIM %d, WAVDIV %f chunk %d" % (newrate, rate, maxbits, maxamp, decim, wavdiv, inchunk))
 
-        l = insamps.shape[0]
-        outsamps = np.ndarray(l // decim)
-        decoder.go(insamps, outsamps)
 
-        ls = outsamps
+        n = insamps.shape[0]
+        l = insamps.shape[1]
+
+        for i, ch in enumerate(args.channel):
+            decoders[i].go(insamps[ch,:], outsamps[i,:])
+
+        ls = outsamps.sum(0) / float(ns)
+
         #ls = np.sign(outsamps) * np.log(np.abs(outsamps))
 
-        mean = np.mean(ls)
-        rms = np.sqrt(np.mean((ls-mean)**2))
+        maxabs = minabs = rms = mean = 1
+        if args.stats:
+            maxabs = np.max(np.abs(ls))
+            minabs = np.min(np.abs(ls))
+            rms = np.sqrt(np.mean((ls-mean)**2))
+            mean = np.mean(ls)
+
         scale = 2**15
         scale *= scaleboost*DEFAULTBOOST
         scaled = ls * scale
-        maxabs = np.max(np.abs(ls))
-        minabs = np.min(np.abs(ls))
 
-        if first:
+        if first and args.stats:
             print("rms %f, scale %f, mean %f maxabs %f minabs %f" % (rms, scale, mean, maxabs, minabs))
             if doplot:
                 fig = plt.figure(1)
@@ -146,14 +147,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--decim', type=int, default=128)
     parser.add_argument('-w', '--wavdiv', type=float, default=1)
-    parser.add_argument('-s', '--scaleboost', type=int, default=1)
+    parser.add_argument('-s', '--scaleboost', type=float, default=1)
     parser.add_argument('-o', '--output', type=str, metavar='wavfile', nargs='?')
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
     parser.add_argument('-l', '--live', action='store_true')
     parser.add_argument('--stream', help="Low latency streaming, input must be realtime speed", action='store_true')
-    parser.add_argument('-c', '--channel', type=int, default=0)
+    parser.add_argument('-c', '--channel')
     parser.add_argument('--bitex', help="Single bit input stream", action='store_true')
+    parser.add_argument('--stats', action="store_true")
     args = parser.parse_args()
 
     if args.input:
@@ -167,6 +169,14 @@ def main():
     if args.wavdiv != 1 and args.live:
         print("--wavdiv doesn't make sense with --live")
         #sys.exit(1)
+
+    if args.channel:
+        args.channel = [int(x.strip()) for x in args.channel.split(',')]
+    else:
+        args.channel = [0]
+
+    # unpackbits() has big endian bytes ????
+    args.channel = [NSTREAMS-1-c for c in args.channel]
 
 
     run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
