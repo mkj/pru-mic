@@ -142,7 +142,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
         play.flush()
 
     if doplot:
-        wiggle.wiggle(wiggle.fakeframe(plotsamps))
+        wiggle.wiggle(wiggle.Frame(plotsamps, rate))
 
 
 def main():

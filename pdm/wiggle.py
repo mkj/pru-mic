@@ -22,14 +22,14 @@ THE SOFTWARE.
 import numpy as np
 import pylab
 
-class fakeframe(dict):
-        def __init__(self, tracks):
+class Frame(dict):
+        def __init__(self, tracks, srate):
                 """ takes an array shaped as [tracks, nsamps] """
                 self['trace'] = tracks
                 self['ns'] = tracks.size
                 self.size = tracks.shape[0]
                 self['ns'] = [tracks.shape[1]] * self.size
-
+                self.srate = srate
 
 def wiggle(frame, scale=1.0):
         fig = pylab.figure()
@@ -55,12 +55,18 @@ def wiggle(frame, scale=1.0):
         order = np.argsort(y) 
         #shift from amplitudes to plotting coordinates
         x_shift, y = y[order].__divmod__(ns)
+
+        # main x axis milliseconds
+        srate_scale = 1000 / frame.srate
+        y *= srate_scale
+
         ax.plot(y, x[order] *scalar + x_shift + 1, 'k')
-        x[x<0] = np.nan
+        x[x>0] = np.nan
         x = x[order] *scalar + x_shift + 1
         ax.fill(y, x, 'k', aa=True) 
         ax.set_ylim([nt,0])
-        ax.set_xlim([0,ns])
+        ax.set_xlim([0,ns * srate_scale])
+
         pylab.tight_layout()
         pylab.show()
         
