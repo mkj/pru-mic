@@ -93,6 +93,8 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
     outsamps = np.ndarray([ns, inchunk // decim])
     decoders = [cic.cic_n4m2(decim) for _ in args.channel]
 
+    plotsamps = np.ndarray([ns, 0])
+
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
 
@@ -127,20 +129,20 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
 
         if first and args.stats:
             print("rms %f, scale %f, mean %f maxabs %f minabs %f" % (rms, scale, mean, maxabs, minabs))
-            if doplot:
-                fig = plt.figure(1)
-                plt.plot(ls)
-                plt.show()
-
         if w or play:
             wavbuf = scaled.astype('int16').tobytes()
         if w:
             w.writeframes(wavbuf)
         if play:
             play.push(wavbuf)
+        if doplot:
+            plotsamps = np.append(plotsamps, outsamps, 1)
 
     if play:
         play.flush()
+
+    if doplot:
+        wiggle.wiggle(wiggle.fakeframe(plotsamps))
 
 
 def main():
@@ -171,11 +173,14 @@ def main():
         #sys.exit(1)
 
     if args.channel:
-        args.channel = [int(x.strip()) for x in args.channel.split(',')]
+        if args.channel == '.':
+            args.channel = list(range(NSTREAMS))
+        else:
+            args.channel = [int(x.strip()) for x in args.channel.split(',')]
     else:
         args.channel = [0]
 
-    # unpackbits() has big endian bytes ????
+    # fix up channel numbers - unpackbits() has big endian bytes ????
     args.channel = [NSTREAMS-1-c for c in args.channel]
 
 

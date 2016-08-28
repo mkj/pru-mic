@@ -22,6 +22,15 @@ THE SOFTWARE.
 import numpy as np
 import pylab
 
+class fakeframe(dict):
+        def __init__(self, tracks):
+                """ takes an array shaped as [tracks, nsamps] """
+                self['trace'] = tracks
+                self['ns'] = tracks.size
+                self.size = tracks.shape[0]
+                self['ns'] = [tracks.shape[1]] * self.size
+
+
 def wiggle(frame, scale=1.0):
         fig = pylab.figure()
         ax = fig.add_subplot(111)        
@@ -46,12 +55,12 @@ def wiggle(frame, scale=1.0):
         order = np.argsort(y) 
         #shift from amplitudes to plotting coordinates
         x_shift, y = y[order].__divmod__(ns)
-        ax.plot(x[order] *scalar + x_shift + 1, y, 'k')
+        ax.plot(y, x[order] *scalar + x_shift + 1, 'k')
         x[x<0] = np.nan
         x = x[order] *scalar + x_shift + 1
-        ax.fill(x,y, 'k', aa=True) 
-        ax.set_xlim([0,nt])
-        ax.set_ylim([ns,0])
+        ax.fill(y, x, 'k', aa=True) 
+        ax.set_ylim([nt,0])
+        ax.set_xlim([0,ns])
         pylab.tight_layout()
         pylab.show()
         
