@@ -1,6 +1,4 @@
 """
-Modified (c) 2016 Matt Johnston
-
 Based on plotting code in PySeis:
 Copyright (c) 2013 Stewart Fletcher
 
@@ -21,17 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+Modified 2016 Matt Johnston matt@ucc.asn.au to plot horizontally an work
+with different frame object.
 """
 import numpy as np
 import pylab
-
-class Frame(dict):
-        def __init__(self, tracks, srate):
-                """ takes an array shaped as [tracks, nsamps] """
-                self.tracks = tracks
-                self.nt = tracks.shape[0]
-                self.ns = tracks.shape[1]
-                self.srate = srate
 
 def wiggle(frame, scale=1.0):
         fig = pylab.figure()

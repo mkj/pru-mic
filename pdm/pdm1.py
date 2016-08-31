@@ -18,6 +18,7 @@ import wiggle
 import cic
 import player
 import utils
+import tracks
 
 
 NSTREAMS = 8
@@ -73,7 +74,7 @@ def openwav(fn, rate):
 def frombytefile(f):
     return np.fromfile(f, dtype=np.uint8)
 
-def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
+def run_cic1(args, inf, decim, wavdiv, scaleboost, wavfn = None):
 
     rate = F/decim
     newrate = rate / wavdiv
@@ -98,7 +99,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
     decoders = [cic.cic_n4m2(decim) for _ in args.channel]
 
     plotsamps = None
-    if doplot:
+    if args.plot or args.frameout:
         plotsamps = np.ndarray([ns, 0])
 
     for chunk, insamps in enumerate(ins):
@@ -147,16 +148,21 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
     if play:
         play.flush()
 
-    if plotsamps is not None and args.range:
+    if plotsamps is not None:
         s, e = (0, plotsamps.shape[1])
-        if args.range[0] is not None:
-            s = int(args.range[0] * rate / 1000.0)
-        if args.range[1] is not None:
-            e = int(args.range[1] * rate / 1000.0)
-        plotsamps = plotsamps[:,s:e]
+        if args.range:
+            if args.range[0] is not None:
+                s = int(args.range[0] * rate / 1000.0)
+            if args.range[1] is not None:
+                e = int(args.range[1] * rate / 1000.0)
+            plotsamps = plotsamps[:,s:e]
 
-    if doplot:
-        wiggle.wiggle(wiggle.Frame(plotsamps, rate))
+    fr = tracks.Frame(plotsamps, rate, s)
+    if args.frameout:
+        fr.save(args.frameout)
+    if args.plot:
+        wiggle.wiggle(fr)
+
 
 def main():
     np.set_printoptions(threshold=np.inf)
@@ -166,6 +172,7 @@ def main():
     parser.add_argument('-w', '--wavdiv', type=float, default=1)
     parser.add_argument('-s', '--scaleboost', type=float, default=1)
     parser.add_argument('-o', '--output', type=str, metavar='wavfile', nargs='?')
+    parser.add_argument('--frameout', type=str, metavar='frameoutfile', nargs='?')
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
     parser.add_argument('-l', '--live', action='store_true')
@@ -204,7 +211,7 @@ def main():
     # fix up channel numbers - unpackbits() has big endian bytes ????
     args.channel = [NSTREAMS-1-c for c in args.channel]
 
-    run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
+    run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.output)
 
 
 if __name__ == '__main__':
