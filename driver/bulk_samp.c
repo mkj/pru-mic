@@ -505,7 +505,6 @@ static void __exit bulk_samp_exit(void)
 module_init(bulk_samp_init);
 module_exit(bulk_samp_exit);
 
-// TODO
 MODULE_AUTHOR("Matt Johnston <matt@ucc.asn.au>");
 MODULE_DESCRIPTION("bulksamp pru input");
 MODULE_LICENSE("GPL v2");

@@ -1,3 +1,5 @@
+; (c) 2016 Matt Johnston <matt@ucc.asn.au>
+
         .sect   ".text:sampleloop"
         .clink
 ;       "void sampleloop()"

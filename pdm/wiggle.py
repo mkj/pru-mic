@@ -1,4 +1,7 @@
 """
+Modified (c) 2016 Matt Johnston
+
+Based on plotting code in PySeis:
 Copyright (c) 2013 Stewart Fletcher
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

@@ -1,4 +1,7 @@
 /*
+ * Matt Johnston <matt@ucc.asn.au> 2016
+ *
+ * Based on sample code:
  * Copyright (C) 2015 Texas Instruments Incorporated - http://www.ti.com/ 
  *  
  *  
@@ -30,8 +33,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
-// Matt Johnston <matt@ucc.asn.au> 2016
 
 #include <stdint.h>
 #include <stdio.h>
@@ -240,7 +241,7 @@ void handle_rpmsg()
                             poke_pru0(BULK_SAMP_MSG_STOP, 1);
                             /* Discard output */
 
-                            send_message_debug("cycle", "stop message", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 666, PRU0_CTRL.STALL);
+                            //send_message_debug("cycle", "stop message", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 666, PRU0_CTRL.STALL);
 
                         }
                         break;
@@ -249,11 +250,9 @@ void handle_rpmsg()
                             struct bulk_samp_msg_buffers *m = (void*)payload;
                             buffer_count = m->buffer_count;
                             buffer_size = m->buffer_size;
-                            send_message_debug("buffers", "", 1, 2, 3);
                             for (int i = 0; i < buffer_count; i++)
                             {
                                 out_buffers[i] = (void*)m->buffers[i];
-                                send_message_debug("buffer", "", i, (uint32_t)out_buffers[i], 0);
                             }
                             out_index = 0;
                         }
@@ -261,7 +260,6 @@ void handle_rpmsg()
                     }
                 }
                 reply_confirm(payload[0]);
-                send_message_debug("got message", "abc", payload[0], 0, 0);
             }
         }
     }
@@ -324,6 +322,8 @@ void setup_rpmsg()
     {
         out_buffers[i] = 0;
     }
+
+    send_message_debug("bulksamp pru firmware 2016", "Matt Johnston matt@ucc.asn.au", 0, 0, 0);
 }
 
 // how many cycles between calls to GRAB_SAMPLE_INTERVAL, for testing.
@@ -335,7 +335,7 @@ void main() {
     setup_rpmsg();
     setup_pru();
 
-    send_message_debug("cycle", "begin", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 888, PRU0_CTRL.STALL);
+    //send_message_debug("cycle", "begin", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 888, PRU0_CTRL.STALL);
 
     while(1)
     {

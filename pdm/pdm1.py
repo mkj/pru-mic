@@ -1,5 +1,7 @@
 #!../venv/bin/python
 
+# (c) 2016 Matt Johnston matt@ucc.asn.au
+
 import struct
 import sys
 import itertools
