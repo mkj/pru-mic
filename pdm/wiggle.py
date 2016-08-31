@@ -25,20 +25,19 @@ import pylab
 class Frame(dict):
         def __init__(self, tracks, srate):
                 """ takes an array shaped as [tracks, nsamps] """
-                self['trace'] = tracks
-                self['ns'] = tracks.size
-                self.size = tracks.shape[0]
-                self['ns'] = [tracks.shape[1]] * self.size
+                self.tracks = tracks
+                self.nt = tracks.shape[0]
+                self.ns = tracks.shape[1]
                 self.srate = srate
 
 def wiggle(frame, scale=1.0):
         fig = pylab.figure()
         ax = fig.add_subplot(111)        
-        ns = frame['ns'][0]
-        nt = frame.size
-        scalar = scale*frame.size/(frame.size*0.2) #scales the trace amplitudes relative to the number of traces
-        frame['trace'][:,-1] = np.nan #set the very last value to nan. this is a lazy way to prevent wrapping
-        vals = frame['trace'].ravel() #flat view of the 2d array.
+        ns = frame.ns
+        nt = frame.nt
+        scalar = scale*frame.nt/(frame.nt*0.2) #scales the trace amplitudes relative to the number of traces
+        frame.tracks[:,-1] = np.nan #set the very last value to nan. this is a lazy way to prevent wrapping
+        vals = frame.tracks.ravel() #flat view of the 2d array.
         vect = np.arange(vals.size).astype(np.float) #flat index array, for correctly locating zero crossings in the flat view
         crossing = np.where(np.diff(np.signbit(vals)))[0] #index before zero crossing
         #use linear interpolation to find the zero crossing, i.e. y = mx + c. 

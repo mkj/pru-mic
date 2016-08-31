@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import wiggle
 import cic
 import player
+import utils
 
 
 NSTREAMS = 8
@@ -26,7 +27,8 @@ INBLOCK_MS = 5
 
 DEFAULTBOOST=2
 
-np.set_printoptions(threshold=np.inf)
+class PDMException(Exception):
+    pass
 
 def demux(b):
     """ demultiplexes b """
@@ -93,7 +95,9 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
     outsamps = np.ndarray([ns, inchunk // decim])
     decoders = [cic.cic_n4m2(decim) for _ in args.channel]
 
-    plotsamps = np.ndarray([ns, 0])
+    plotsamps = None
+    if doplot:
+        plotsamps = np.ndarray([ns, 0])
 
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
@@ -135,17 +139,26 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, doplot, wavfn = None):
             w.writeframes(wavbuf)
         if play:
             play.push(wavbuf)
-        if doplot:
+        if plotsamps is not None:
             plotsamps = np.append(plotsamps, outsamps, 1)
 
     if play:
         play.flush()
 
+    if plotsamps is not None and args.range:
+        s, e = (0, plotsamps.shape[1])
+        if args.range[0] is not None:
+            s = int(args.range[0] * rate / 1000.0)
+        if args.range[1] is not None:
+            e = int(args.range[1] * rate / 1000.0)
+        plotsamps = plotsamps[:,s:e]
+
     if doplot:
         wiggle.wiggle(wiggle.Frame(plotsamps, rate))
 
-
 def main():
+    np.set_printoptions(threshold=np.inf)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--decim', type=int, default=128)
     parser.add_argument('-w', '--wavdiv', type=float, default=1)
@@ -154,6 +167,7 @@ def main():
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
     parser.add_argument('-l', '--live', action='store_true')
+    parser.add_argument('-r', '--range', help='Limit output range. In milliseconds', type=str)
     parser.add_argument('--stream', help="Low latency streaming, input must be realtime speed", action='store_true')
     parser.add_argument('-c', '--channel')
     parser.add_argument('--bitex', help="Single bit input stream", action='store_true')
@@ -170,7 +184,12 @@ def main():
 
     if args.wavdiv != 1 and args.live:
         print("--wavdiv doesn't make sense with --live")
-        #sys.exit(1)
+
+    if args.range:
+        if args.live:
+            E("--range and --live don't work together")
+            sys.exit(1)
+        args.range = utils.parse_range(args.range)
 
     if args.channel:
         if args.channel == '.':
@@ -182,7 +201,6 @@ def main():
 
     # fix up channel numbers - unpackbits() has big endian bytes ????
     args.channel = [NSTREAMS-1-c for c in args.channel]
-
 
     run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.plot, args.output)
 
