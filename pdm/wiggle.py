@@ -51,16 +51,17 @@ def wiggle(frame, scale=1.0):
         #shift from amplitudes to plotting coordinates
         x_shift, y = y[order].__divmod__(ns)
 
-        # main x axis milliseconds
         srate_scale = 1000 / frame.srate
         y *= srate_scale
+        y += frame.start*1000
+
 
         ax.plot(y, x[order] *scalar + x_shift + 1, 'k')
         x[x>0] = np.nan
         x = x[order] *scalar + x_shift + 1
         ax.fill(y, x, 'k', aa=True) 
-        ax.set_ylim([nt,0])
-        ax.set_xlim([0,ns * srate_scale])
+        ax.set_ylim([nt+1,0])
+        ax.set_xlim([1000*frame.start, 1000*frame.start + ns * srate_scale])
 
         pylab.tight_layout()
         pylab.show()

@@ -96,11 +96,13 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, wavfn = None):
         ns = NSTREAMS
 
     outsamps = np.ndarray([ns, inchunk // decim])
+    outsamps[:] = 8888
     decoders = [cic.cic_n4m2(decim) for _ in args.channel]
 
     plotsamps = None
     if args.plot or args.frameout:
         plotsamps = np.ndarray([ns, 0])
+        plotsamps[:] = 9999
 
     for chunk, insamps in enumerate(ins):
         first = (chunk == 0)
@@ -149,15 +151,17 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, wavfn = None):
         play.flush()
 
     if plotsamps is not None:
+        ss = 0
         s, e = (0, plotsamps.shape[1])
         if args.range:
             if args.range[0] is not None:
                 s = int(args.range[0] * rate / 1000.0)
+                ss = args.range[0]
             if args.range[1] is not None:
                 e = int(args.range[1] * rate / 1000.0)
             plotsamps = plotsamps[:,s:e]
+        fr = tracks.Frame(plotsamps, rate, ss/1000.0)
 
-    fr = tracks.Frame(plotsamps, rate, s)
     if args.frameout:
         fr.save(args.frameout)
     if args.plot:
@@ -176,7 +180,7 @@ def main():
     parser.add_argument('-i', '--input', type=str, metavar='infile', nargs='?')
     parser.add_argument('-p', '--plot', action='store_true')
     parser.add_argument('-l', '--live', action='store_true')
-    parser.add_argument('-r', '--range', help='Limit output range. In milliseconds', type=str)
+    parser.add_argument('-r', '--range', help='Limit output range [start]:[end]. In milliseconds', type=str)
     parser.add_argument('--stream', help="Low latency streaming, input must be realtime speed", action='store_true')
     parser.add_argument('-c', '--channel')
     parser.add_argument('--bitex', help="Single bit input stream", action='store_true')
