@@ -16,6 +16,7 @@ def wiggle(frame, scale=1.0):
         times[0] = times[1]
         times[-1] = times[-2]
         fmt = 'k-' # black solid line
+        eps = 0.01 # bit of a bodge
 
         for t in range(frame.nt):
                 vals[0] = t
@@ -23,8 +24,8 @@ def wiggle(frame, scale=1.0):
                 vals[1:-1] = t + 0.5*frame.tracks[t,:]
 
                 # clip fill to positive values only
-                clip_points = np.array([frame.start,t,
-                                        frame.end,t,
+                clip_points = np.array([frame.start,t+eps,
+                                        frame.end,t+eps,
                                         frame.end,9999,
                                         frame.start,9999])
                 clip_points.shape = (4,2)

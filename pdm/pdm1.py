@@ -160,7 +160,7 @@ def run_cic1(args, inf, decim, wavdiv, scaleboost, wavfn = None):
             if args.range[1] is not None:
                 e = int(args.range[1] * rate / 1000.0)
             plotsamps = plotsamps[:,s:e]
-        fr = tracks.Tracks(plotsamps, rate, ss/1000.0)
+        fr = tracks.Tracks(plotsamps*4, rate, ss/1000.0)
 
     if args.frameout:
         fr.save(args.frameout)
