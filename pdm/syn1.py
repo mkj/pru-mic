@@ -22,13 +22,23 @@ def syn1():
     cv = scipy.signal.fftconvolve(s1, c)
     cv = cv
 
-    sp = decon1.spike(cv)
+    db = {}
+    sp = decon1.spike(cv, db)
 
-    tr = np.zeros((3,len(s1)))
 
+    # division
+    zp = np.zeros(len(cv))
+    zp[:len(c)] = c
+    div = scipy.fftpack.fft(cv) / scipy.fftpack.fft(zp)
+    div = scipy.ifft(div).real
+
+    tr = np.zeros((6,len(s1)))
     tr[0,:] = s1
-    tr[1,:] = cv[:len(s1)]
-    tr[2,:] = sp[:len(s1)]
+    tr[1,:] = c[:len(s1)]
+    tr[2,:] = cv[:len(s1)]
+    tr[3,:] = db['wl'][:len(s1)]
+    tr[4,:] = sp[:len(s1)]
+    tr[5,:] = div[:len(s1)]
 
     rms = np.abs(tr).max(1)
     #rms = ((tr*tr).sum(1) / tr.shape[1]) ** 0.5
