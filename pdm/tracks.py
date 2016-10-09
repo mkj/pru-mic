@@ -3,7 +3,7 @@ import copy
 import pickle
 
 class Tracks(object):
-    VERSION = 2
+    VERSION = 3
     def __init__(self, tracks, srate, start = 0.0):
         """ Creates a frame holding tracks and metadata.
 

@@ -10,17 +10,22 @@ import decon1
 def syn1():
     imp = [100,270,413,500]
     s1 = np.zeros(1000)
+    c = np.array([0,1,-2,-1.5,-1,-0.2,0.3,1,0.5,0])
 
     imp = [3, 7]
     s1 = np.zeros(13)
 
+    imp = [30, 70]
+    s1 = np.zeros(130)
+    c = scipy.signal.resample(c, len(c) * 10)
+
     for i in imp:
         s1[i] = 1
 
-    c = np.array([0,1,-2,-1.5,-1,-0.2,0.3,1,0.5,0])
-
     cv = scipy.signal.fftconvolve(s1, c)
-    cv = cv
+    cvori = cv
+    NOISE=0.1
+    cv = cv + np.random.rand(*cv.shape)*NOISE
 
     db = {}
     sp = decon1.spike(cv, db)
@@ -34,13 +39,24 @@ def syn1():
 
     auc1 = scipy.signal.correlate(cv, cv)
 
+    aucamp = np.abs(scipy.fftpack.fft(db['auc']))
+    aucang = np.angle(scipy.fftpack.fft(db['auc']))
+
+    wlamp = np.abs(scipy.fftpack.fft(c))
+    wlang = np.angle(scipy.fftpack.fft(c))
+
     t = tracks.Tracks(None, 1000, 0)
-    t.add(auc1, 'auc1')
     t.add(s1, 's1')
     t.add(c, 'real wavelet')
+    t.add(wlamp, 'real amp')
+    t.add(wlang, 'real ang')
+    #t.add(cvori, 'nonoise')
     t.add(cv, 'convolved')
     t.add(db['auc'], 'autoc')
-    t.add(db['wl'].real, 'decon wavelet')
+    t.add(aucamp, 'auc amp')
+    t.add(aucang, 'auc ang')
+    #t.add(db['wl'].real, 'decon wavelet')
+    #t.add(auc1, 'auc1')
     t.add(sp.real, 'spike')
     t.add(div.real, 'freqdiv')
 
