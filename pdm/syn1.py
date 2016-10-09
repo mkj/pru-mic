@@ -11,8 +11,8 @@ def syn1():
     imp = [100,270,413,500]
     s1 = np.zeros(1000)
 
-    imp = [3]
-    s1 = np.zeros(10)
+    imp = [3, 7]
+    s1 = np.zeros(13)
 
     for i in imp:
         s1[i] = 1
@@ -32,28 +32,24 @@ def syn1():
     div = scipy.fftpack.fft(cv) / scipy.fftpack.fft(zp)
     div = scipy.ifft(div).real
 
-    tr = np.zeros((6,len(s1)))
-    tr[0,:] = s1
-    tr[1,:] = c[:len(s1)]
-    tr[2,:] = cv[:len(s1)]
-    tr[3,:] = db['wl'][:len(s1)]
-    tr[4,:] = sp[:len(s1)]
-    tr[5,:] = div[:len(s1)]
+    auc1 = scipy.signal.correlate(cv, cv)
 
-    rms = np.abs(tr).max(1)
-    #rms = ((tr*tr).sum(1) / tr.shape[1]) ** 0.5
-    print(rms)
+    t = tracks.Tracks(None, 1000, 0)
+    t.add(auc1, 'auc1')
+    t.add(s1, 's1')
+    t.add(c, 'real wavelet')
+    t.add(cv, 'convolved')
+    t.add(db['auc'], 'autoc')
+    t.add(db['wl'].real, 'decon wavelet')
+    t.add(sp.real, 'spike')
+    t.add(div.real, 'freqdiv')
 
-    tr = tr / rms[:,np.newaxis]
-    tr = tr * 0.2
+    # normalise
+    t.each(lambda tr: tr / np.abs(tr).max())
+    #t.tracks /= np.max(np.abs(t.tracks))
 
-    print(tr)
-
-    print(np.abs(tr).max(1))
-
-    fr = tracks.Tracks(tr, 1000, 0)
-
-    wiggle.wiggle(fr)
+    print("\n".join("%d %s" % x for x in enumerate(t.names, 1)))
+    wiggle.wiggle(t)
 
 def main():
     syn1()
