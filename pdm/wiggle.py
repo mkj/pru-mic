@@ -27,13 +27,15 @@ import numpy as np
 import pylab
 
 def wiggle(frame, scale=1.0):
+        tracks = frame.tracks.copy()
         fig = pylab.figure()
         ax = fig.add_subplot(111)        
         ns = frame.ns
         nt = frame.nt
         scalar = scale*frame.nt/(frame.nt*0.2) #scales the trace amplitudes relative to the number of traces
-        #frame.tracks[:,-1] = np.nan #set the very last value to nan. this is a lazy way to prevent wrapping
-        vals = frame.tracks.ravel() #flat view of the 2d array.
+        tracks *= -1 # invert so that positive is up
+        tracks[:,-1] = np.nan #set the very last value to nan. this is a lazy way to prevent wrapping
+        vals = tracks.ravel() #flat view of the 2d array.
         vect = np.arange(vals.size).astype(np.float) #flat index array, for correctly locating zero crossings in the flat view
         crossing = np.where(np.diff(np.signbit(vals)))[0] #index before zero crossing
         #use linear interpolation to find the zero crossing, i.e. y = mx + c. 
