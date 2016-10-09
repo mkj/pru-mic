@@ -20,12 +20,12 @@ class Tracks(object):
         return 'Tracks(nt %d, ns %d, srate %d start %f)' % (self.nt, self.ns, self.srate, self.start)
 
     def set_tracks(self, tracks):
-        self.tracks = tracks
-        if len(tracks.shape) == 1:
+        self.tracks = tracks.copy()
+        if len(self.tracks.shape) == 1:
             # 1d array
-            tracks.shape = (1, tracks.shape[0])
-        self.nt = tracks.shape[0]
-        self.ns = tracks.shape[1]
+            self.tracks.shape = (1, self.tracks.shape[0])
+        self.nt = self.tracks.shape[0]
+        self.ns = self.tracks.shape[1]
         return self
 
     def copy(self):
