@@ -1,7 +1,7 @@
 import copy
 import pickle
 
-class Frame(object):
+class Tracks(object):
     VERSION = 2
     def __init__(self, tracks, srate, start = 0.0):
         """ Creates a frame holding tracks and metadata.
