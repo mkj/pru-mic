@@ -22,6 +22,18 @@ class Tracks(object):
     def __repr__(self):
         return 'Tracks(nt %d, ns %d, srate %d start %f)' % (self.nt, self.ns, self.srate, self.start)
 
+    def chop(self, start, end):
+        if start < self.start:
+            W("chop start %f is before original start %f" % (start, self.start))
+        if end > self.end:
+            W("chop end %f is before original end %f" % (end, self.end))
+
+        s = int(max(start - self.start, 0) * self.srate)
+        e = int(min(end - self.end, self.end) * self.srate)
+        chopped = self.copy().set_tracks(self.tracks[:,s:e])
+        chopped.start = start
+        return chopped
+
     @property
     def nt(self):
         if self.tracks.shape == ():
