@@ -57,7 +57,9 @@ def bitexstream(f, chunk):
         if len(bl) != bytechunk:
             return
         r = np.fromstring(bl, count=bytechunk, dtype=np.uint8)
-        yield np.unpackbits(r)
+        n = np.unpackbits(r)
+        n.shape = (1,n.shape[0])
+        yield n
 
 def decodestream(f, chunk):
     decoders = [decimater() for _ in range(NSTREAMS)]
@@ -204,16 +206,19 @@ def main():
             sys.exit(1)
         args.range = utils.parse_range(args.range)
 
-    if args.channel:
-        if args.channel == '.':
-            args.channel = list(range(NSTREAMS))
-        else:
-            args.channel = [int(x.strip()) for x in args.channel.split(',')]
-    else:
+    if args.bitex:
         args.channel = [0]
+    else:
+        if args.channel:
+            if args.channel == '.':
+                args.channel = list(range(NSTREAMS))
+            else:
+                args.channel = [int(x.strip()) for x in args.channel.split(',')]
+        else:
+            args.channel = [0]
 
-    # fix up channel numbers - unpackbits() has big endian bytes ????
-    args.channel = [NSTREAMS-1-c for c in args.channel]
+        # fix up channel numbers - unpackbits() has big endian bytes ????
+        args.channel = [NSTREAMS-1-c for c in args.channel]
 
     run_cic1(args, f, args.decim, args.wavdiv, args.scaleboost, args.output)
 
