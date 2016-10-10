@@ -19,21 +19,23 @@ def wiggle(frame, scale=1.0):
         eps = 0.01 # bit of a bodge
 
         for t in range(frame.nt):
-                vals[0] = t
-                vals[-1] = t
-                vals[1:-1] = t + 0.5*frame.tracks[t,:]
+                yorigin = t+1
+                vals[0] = yorigin
+                vals[-1] = yorigin
+                vals[1:-1] = yorigin + -0.5*frame.tracks[t,:]
 
                 # clip fill to positive values only
-                clip_points = np.array([frame.start,t+eps,
-                                        frame.end,t+eps,
-                                        frame.end,9999,
-                                        frame.start,9999])
+                clip_points = np.array([frame.start,yorigin-eps,
+                                        frame.end,yorigin-eps,
+                                        frame.end,-10,
+                                        frame.start,-10])
                 clip_points.shape = (4,2)
                 patch = matplotlib.patches.Polygon(clip_points, closed=True, transform=ax.transData)
                 ax.fill(times,vals,color='k',clip_path=patch)
 
                 ax.plot(times, vals, fmt)
 
-        plt.yticks(range(frame.nt), frame.names)
+        ax.set_ylim([frame.nt+1,0])
+        plt.yticks(range(1,frame.nt+1), frame.names)
         plt.tight_layout()
         plt.show()
