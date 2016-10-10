@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.transforms
 import matplotlib.patches
 
-def wiggle(frame, scale=1.0):
+def wiggle(frame, posfill=True):
         fig,ax = plt.subplots()
 
         # add an extra zero start/end sample so that fill works properly
@@ -25,13 +25,14 @@ def wiggle(frame, scale=1.0):
                 vals[1:-1] = yorigin + -0.5*frame.tracks[t,:]
 
                 # clip fill to positive values only
-                clip_points = np.array([frame.start,yorigin-eps,
-                                        frame.end,yorigin-eps,
-                                        frame.end,-10,
-                                        frame.start,-10])
-                clip_points.shape = (4,2)
-                patch = matplotlib.patches.Polygon(clip_points, closed=True, transform=ax.transData)
-                ax.fill(times,vals,color='k',clip_path=patch)
+                if posfill:
+                        clip_points = np.array([frame.start,yorigin-eps,
+                                                frame.end,yorigin-eps,
+                                                frame.end,-10,
+                                                frame.start,-10])
+                        clip_points.shape = (4,2)
+                        patch = matplotlib.patches.Polygon(clip_points, closed=True, transform=ax.transData)
+                        ax.fill(times,vals,color='k',clip_path=patch)
 
                 ax.plot(times, vals, fmt)
 
