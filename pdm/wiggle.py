@@ -32,14 +32,20 @@ class wiggle(object):
             return
 
         self.current_scale *= scale
-        for index, l in enumerate(self.lines):
-            l.set_ydata(self.get_vals(index))
+        for index in range(self.tracks.nt):
+            vals = self.get_vals(index)
+            self.lines[index].set_ydata(vals)
+            if self.fills:
+                xy = self.fills[index].get_xy()
+                # values go in second column
+                xy[:-1,1] = vals
+                xy[0,1] = xy[-1,1] # it's a closed path
+                self.fills[index].set_xy(xy)
         plt.draw()
 
     def first_plot(self):
         tracks = self.tracks
         fig,ax = plt.subplots()
-
 
         # add an extra zero start/end sample so that fill works properly
         times = np.zeros(tracks.ns+2)
@@ -51,6 +57,7 @@ class wiggle(object):
         eps = 0.01 # bit of a bodge
 
         self.lines = []
+        self.fills = []
 
         for index in range(tracks.nt):
             yorigin = index+1
@@ -64,7 +71,8 @@ class wiggle(object):
                                         tracks.start,-10])
                 clip_points.shape = (4,2)
                 patch = matplotlib.patches.Polygon(clip_points, closed=True, transform=ax.transData)
-                ax.fill(times,vals,color='k',clip_path=patch)
+                f = ax.fill(times,vals,color='k',clip_path=patch)
+                self.fills.append(f[0])
 
             l = plt.plot(times, vals, fmt)
             self.lines.append(l[0])
