@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.signal
 import copy
 import pickle
 
@@ -33,6 +34,11 @@ class Tracks(object):
         chopped = self.copy().set_tracks(self.tracks[:,s:e])
         chopped.start = start
         return chopped
+
+    def resample(self, srate):
+        newsamps = int(self.ns * srate / self.srate)
+        self.tracks = scipy.signal.resample(self.tracks, newsamps, axis=1)
+        self.srate = srate
 
     @property
     def nt(self):

@@ -1,3 +1,7 @@
+# CIC filter
+# based on a C implementation by Bruce Land 
+#https://people.ece.cornell.edu/land/courses/ece4760/Math/GCC644/CICfilters/CIC_filter_N2_R4_M2.c
+
 import numpy as np
 import numba
 
@@ -12,6 +16,7 @@ spec = (
     ('iter', numba.int32),
     ('maxamp', numba.float64),
     )
+
 
 @numba.jitclass(spec)
 class cic_n4m2(object):
