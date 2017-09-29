@@ -5,8 +5,8 @@ The PDM microphone is a Knowles SPH0641LU4H
 
 The project consists of 
 
-- pru/ - the bit-banging GPIO driver for the PDM input, which runs on the realtime PRU units of the beaglebone
-- driver/ - a Linux kernel driver which presents /dev/bulksamp. Inputs are multiplexed bitwise, the 8 microphones each contribute a bit to a byte of input.
+- pru/ - the bit-banging GPIO driver for the PDM input, which runs on the realtime PRU units of the beaglebone. pru/bulksamp4.dtsi has instructions for the devicetree.
+- driver/ - a Linux kernel driver which presents /dev/bulksamp. Inputs are multiplexed bitwise, the 8 microphones each contribute a bit to a byte of input. I've tested on Debian 8.5 with 4.1.15-ti-rt-r43, the driver may require the [TI Processor SDK](http://www.ti.com/tool/PROCESSOR-SDK-AM335X) kernel rather than latest Debian.
 - pdm/ - a Python program to decode PDM bitstreams to audio data. This uses Numba to perform fast PDM decoding with a Cascaded integrator–comb (CIC) filter. It also has some waveform plotting code. Tested with Python 3.5.
 - bitex/ - a program to extract a single bitstream from /dev/bulksamp. This can be used to pipe a single microphone into the pdm program.
 - circuit/ - basic pinout
