@@ -1,9 +1,16 @@
 # PRU_CGT environment variable must point to the TI PRU compiler directory. E.g.:
 #(Linux) export PRU_CGT=/home/jason/ti/ccs_v6_1_0/ccsv6/tools/compiler/ti-cgt-pru_2.1.0
 #(Windows) set PRU_CGT=C:/TI/ccs_v6_0_1/ccsv6/tools/compiler/ti-cgt-pru_2.1.0
-ifndef PRU_CGT
-PRU_CGT=/Users/matt/bin/ti/pru_2.1.2/
+ifdef PRU_CGT
+CLPRU=$(PRU_CGT)/bin/clpru
+else
+CLPRU=clpru
 endif
+
+ifndef PRU_C_DIR
+PRU_C_DIR="/usr/share/ti/cgt-pru/include;/usr/share/ti/cgt-pru/lib"
+endif
+
 
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_DIR := $(notdir $(patsubst %/,%,$(dir $(MKFILE_PATH))))
@@ -52,7 +59,7 @@ $(GEN_DIR)/%.out: $(GEN_DIR)/%.object $(LINKER_COMMAND_FILE) $(COMMON_OBJECTS)
 	@echo ''
 	@echo 'Building target: $@'
 	@echo 'Invoking: PRU Linker'
-	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $@ $^ -m$(MAP) --library=libc.a $(LIBS)
+	$(CLPRU) $(CFLAGS) -z -i"$(PRU_C_DIR)" $(LFLAGS) -o $@ $^ -m$(MAP) --library=libc.a $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ''
 	@echo 'Output files can be found in the "$(GEN_DIR)" directory'
@@ -63,10 +70,10 @@ $(GEN_DIR)/%.object: %.c
 	@echo ''
 	@echo 'Building file: $<'
 	@echo 'Invoking: PRU Compiler'
-	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
+	$(CLPRU) --include_path="$(PRU_C_DIR)" $(INCLUDE) $(CFLAGS) -fe $@ $<
 
 $(GEN_DIR)/%.object: %.asm
-	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
+	$(CLPRU) --include_path="$(PRU_C_DIR)" $(INCLUDE) $(CFLAGS) -fe $@ $<
 
 .PHONY: all clean
 
