@@ -1,0 +1,3 @@
+#include "am335x-boneblack.dts"
+
+#include "bulksamp4.dtsi"

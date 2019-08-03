@@ -1,14 +1,9 @@
-/* Put this at 
+/* Copy bulksamp4.dtsi and am335x-boneblack-bulksamp.dtb to
 
-/opt/source/dtb-4.1-ti/src/arm/
+/opt/source/dtb-4.19-ti/src/arm/
 
-Then add
-#include "bulksamp4.dtsi"
-to
-/opt/source/dtb-4.1-tisrc/arm/am335x-boneblack-overlay.dts
-
-In dtb-41-tisrc directory "make; make install" then put 
-dtb=am335x-boneblack-overlay.dtb
+In /opt/source/dtb-4.19-ti directory "make; make install" then put 
+dtb=am335x-boneblack-bulksamp.dtb
 in /boot/uEnv.txt
 
 /*
