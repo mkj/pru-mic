@@ -32,6 +32,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/remoteproc.h>
 #include <linux/string.h>
+#include <linux/rpmsg/virtio_rpmsg.h>
 
 #include "../bulk_samp_common.h"
 
@@ -64,7 +65,7 @@ module_param(buffer_size, int, 0444);
  * being passed between the character device and the PRU.
  */
 struct bulk_samp_dev {
-	struct rpmsg_channel *rpdev;
+	struct rpmsg_device *rpdev;
 	struct device *dev;
 	struct cdev cdev;
 	bool locked;
@@ -123,7 +124,7 @@ static int bulk_samp_open(struct inode *inode, struct file *filp)
 	smp_wmb();
 
 	printk("bulk_samp open\n");
-	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
+	ret = rpmsg_send(prudev->rpdev->ept, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send start failed: %d\n", ret);
 	}
@@ -140,7 +141,7 @@ static int bulk_samp_release(struct inode *inode, struct file *filp)
 	prudev = container_of(inode->i_cdev, struct bulk_samp_dev, cdev);
 
 	printk("bulk_samp stop. full count %zu\n", prudev->full_count);
-	ret = rpmsg_send(prudev->rpdev, &msg, sizeof(msg));
+	ret = rpmsg_send(prudev->rpdev->ept, &msg, sizeof(msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send stop failed: %d\n", ret);
 	}
@@ -211,7 +212,7 @@ static const struct file_operations bulk_samp_fops = {
 	.poll = bulk_samp_poll,
 };
 
-static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
+static void handle_msg_ready(struct rpmsg_device *rpdev, void *data, int len)
 {
 	struct bulk_samp_dev *prudev;
 	//struct bulk_samp_msg_ready *msg = data;
@@ -234,7 +235,7 @@ static void handle_msg_ready(struct rpmsg_channel *rpdev, void *data, int len)
 	wake_up_interruptible(&prudev->wait_list);
 }
 
-static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len)
+static void handle_msg_confirm(struct rpmsg_device *rpdev, void *data, int len)
 {
 	struct bulk_samp_msg_confirm *msg = data;
 
@@ -242,7 +243,7 @@ static void handle_msg_confirm(struct rpmsg_channel *rpdev, void *data, int len)
 	       (int)msg->confirm_type);
 }
 
-static void handle_msg_debug(struct rpmsg_channel *rpdev, void *data, int len)
+static void handle_msg_debug(struct rpmsg_device *rpdev, void *data, int len)
 {
 	struct bulk_samp_msg_debug *msg = data;
 
@@ -250,14 +251,14 @@ static void handle_msg_debug(struct rpmsg_channel *rpdev, void *data, int len)
 	       msg->str1, msg->str2, msg->num1, msg->num2, msg->num3);
 }
 
-static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
+static int bulk_samp_cb(struct rpmsg_device *rpdev, void *data, int len,
 			 void *priv, u32 src)
 {
 	char type;
 
 	if (len < 1) {
 		dev_err(&rpdev->dev, "Short message from PRU!\n");
-		return;
+		return -EINVAL;
 	}
 
 	type = *(char *)data;
@@ -276,22 +277,18 @@ static void bulk_samp_cb(struct rpmsg_channel *rpdev, void *data, int len,
 		dev_err(&rpdev->dev,
 			"Unknown message type %d from PRU, length %d\n", type,
 			len);
+        return -EINVAL;
 	}
+    return 0;
 }
 
 /* copypaste from rpmsg_rpc.c */
-static struct rproc *rpdev_to_rproc(struct rpmsg_channel *rpdev)
+static struct rproc *rpdev_to_rproc(struct rpmsg_device *rpdev)
 {
-	struct virtio_device *vdev;
-
-	vdev = rpmsg_get_virtio_dev(rpdev);
-	if (!vdev)
-		return NULL;
-
-	return rproc_vdev_to_rproc_safe(vdev);
+    return rproc_get_by_child(&rpdev->dev);
 }
 
-static int bulk_samp_probe(struct rpmsg_channel *rpdev)
+static int bulk_samp_probe(struct rpmsg_device *rpdev)
 {
 	int ret;
 	struct bulk_samp_dev *prudev;
@@ -302,9 +299,8 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 		.buffer_size = buffer_size
 	};
 	struct rproc *rp;
-	struct virtio_device *vdev;
 
-	printk("bulk_samp driver - Matt Johnston <matt@ucc.asn.au>\n");
+	printk("bulk_samp probe\n");
 	rp = rpdev_to_rproc(rpdev);
 
 	prudev = devm_kzalloc(&rpdev->dev, sizeof(*prudev), GFP_KERNEL);
@@ -346,8 +342,6 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 
 	prudev->rpdev = rpdev;
 
-	vdev = rpmsg_get_virtio_dev(rpdev);
-
 	/* Allocate large buffers for data transfer. */
 	for (i = 0; i < num_buffers; i++) {
 		/* TODO: for better performance this could use streaming DMA but
@@ -379,7 +373,7 @@ static int bulk_samp_probe(struct rpmsg_channel *rpdev)
 		 rpdev->dst);
 
 	printk("bulk_samp buffers\n");
-	ret = rpmsg_send(prudev->rpdev, &buf_msg, sizeof(buf_msg));
+	ret = rpmsg_send(prudev->rpdev->ept, &buf_msg, sizeof(buf_msg));
 	if (ret) {
 		dev_err(prudev->dev, "rpmsg_send buf_msg failed: %d\n", ret);
 	}
@@ -405,7 +399,7 @@ fail_alloc_minor:
 	return ret;
 }
 
-static void bulk_samp_remove(struct rpmsg_channel *rpdev)
+static void bulk_samp_remove(struct rpmsg_device *rpdev)
 {
 	struct bulk_samp_dev *prudev;
 	int i;
@@ -444,6 +438,8 @@ static struct rpmsg_driver bulk_samp_driver = {
 static int __init bulk_samp_init(void)
 {
 	int ret;
+
+    printk("bulk_samp driver - Matt Johnston <matt@ucc.asn.au>\n");
 
     ret = -EINVAL;
 	if (buffer_size % BULK_SAMP_XFER_SIZE != 0) {
