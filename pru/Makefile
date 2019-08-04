@@ -75,7 +75,23 @@ $(GEN_DIR)/%.object: %.c
 $(GEN_DIR)/%.object: %.asm
 	$(CLPRU) --include_path="$(PRU_C_DIR)" $(INCLUDE) $(CFLAGS) -fe $@ $<
 
-.PHONY: all clean
+install: $(TARGET)
+	@echo Installing
+	cp -fv gen/main_pru0.out /lib/firmware/am335x-pru0-fw
+	cp -fv gen/main_pru1.out /lib/firmware/am335x-pru1-fw
+
+load:
+	#rmmod pru_rproc
+	#modprobe pru_rproc
+	echo stop > /sys/class/remoteproc/remoteproc1/state || true
+	echo stop > /sys/class/remoteproc/remoteproc2/state || true
+	echo am335x-pru0-fw > /sys/class/remoteproc/remoteproc1/firmware
+	echo am335x-pru1-fw > /sys/class/remoteproc/remoteproc2/firmware
+	echo start > /sys/class/remoteproc/remoteproc1/state
+	echo start > /sys/class/remoteproc/remoteproc2/state
+	dmesg | grep pru | tail -3
+
+.PHONY: all clean load
 
 # Remove the $(GEN_DIR) directory
 clean:
