@@ -1,1 +1,0 @@
-"./pru_rpmsg.obj" "./pru_virtqueue.obj" "../gen/rpmsg_lib.lib" 
