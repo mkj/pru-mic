@@ -39,7 +39,6 @@
 #include <pru_cfg.h>
 #include <pru_intc.h>
 #include <rsc_types.h>
-#include <pru_virtqueue.h>
 #include <pru_rpmsg.h>
 #include <pru_ctrl.h>
 #include <sys_mailbox.h>
@@ -53,15 +52,15 @@
 /* Mbox0 - mail_u2_irq (mailbox interrupt for PRU1) is Int Number 59 */
 #define MB_INT_NUMBER 59
 
-/* Host-1 Interrupt sets bit 31 in register R31, host int 1 */
-#define ARM_INT ((uint32_t)(1 << 31))
+/* Host-1 Interrupt sets bit 31 in register R31 */
+#define HOST_INT            ((uint32_t) 1 << 31)
 
-/* The mailboxes used for RPMsg are defined in the Linux device tree
- * PRU0 uses mailboxes 2 (From ARM) and 3 (To ARM)
- * PRU1 uses mailboxes 4 (From ARM) and 5 (To ARM)
+/* The PRU-ICSS system events used for RPMsg are defined in the Linux device tree
+ * PRU0 uses system event 16 (To ARM) and 17 (From ARM)
+ * PRU1 uses system event 18 (To ARM) and 19 (From ARM)
  */
-#define MB_TO_ARM_HOST              5
-#define MB_FROM_ARM_HOST            4
+#define TO_ARM_HOST         18
+#define FROM_ARM_HOST           19
 
 /*
  * Using the name 'rpmsg-client-sample' will probe the RPMsg sample driver
@@ -209,59 +208,49 @@ void handle_rpmsg()
 {
     uint16_t len;
     reset_cyclecount();
-    /* Clear the mailbox interrupt */
-    CT_MBX.IRQ[MB_USER].STATUS_CLR |= 1 << (MB_FROM_ARM_HOST * 2);
-    /* Clear the event status, event MB_INT_NUMBER corresponds to the mailbox interrupt */
-    CT_INTC.SICR_bit.STS_CLR_IDX = MB_INT_NUMBER;
+    CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
     /* Use a while loop to read all of the current messages in the mailbox */
-    while(CT_MBX.MSGSTATUS_bit[MB_FROM_ARM_HOST].NBOFMSG > 0)
+    /* Receive the message */
+    while (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS)
     {
-        /* Check to see if the message corresponds to a receive event for the PRU */
-        if (CT_MBX.MESSAGE[MB_FROM_ARM_HOST] == 1)
+        if (len > 0)
         {
-            /* Receive the message */
-            if (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS)
+            switch (payload[0])
             {
-                if (len > 0)
+                case BULK_SAMP_MSG_START:
                 {
-                    switch (payload[0])
-                    {
-                        case BULK_SAMP_MSG_START:
-                        {
-                            going = 1;
-                            /* Turn on the other pru */
-                            poke_pru0(BULK_SAMP_MSG_START, 1);
-                            out_index = 0;
-                            out_pos = 0;
-                        }
-                        break;
-                        case BULK_SAMP_MSG_STOP:
-                        {
-                            going = 0;
-                            poke_pru0(BULK_SAMP_MSG_STOP, 1);
-                            /* Discard output */
-
-                            //send_message_debug("cycle", "stop message", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 666, PRU0_CTRL.STALL);
-
-                        }
-                        break;
-                        case BULK_SAMP_MSG_BUFFERS:
-                        {
-                            struct bulk_samp_msg_buffers *m = (void*)payload;
-                            buffer_count = m->buffer_count;
-                            buffer_size = m->buffer_size;
-                            for (int i = 0; i < buffer_count; i++)
-                            {
-                                out_buffers[i] = (void*)m->buffers[i];
-                            }
-                            out_index = 0;
-                        }
-                        break;
-                    }
+                    going = 1;
+                    /* Turn on the other pru */
+                    poke_pru0(BULK_SAMP_MSG_START, 1);
+                    out_index = 0;
+                    out_pos = 0;
                 }
-                reply_confirm(payload[0]);
+                break;
+                case BULK_SAMP_MSG_STOP:
+                {
+                    going = 0;
+                    poke_pru0(BULK_SAMP_MSG_STOP, 1);
+                    /* Discard output */
+
+                    //send_message_debug("cycle", "stop message", PRU0_CTRL.CYCLE_bit.CYCLECOUNT, 666, PRU0_CTRL.STALL);
+
+                }
+                break;
+                case BULK_SAMP_MSG_BUFFERS:
+                {
+                    struct bulk_samp_msg_buffers *m = (void*)payload;
+                    buffer_count = m->buffer_count;
+                    buffer_size = m->buffer_size;
+                    for (int i = 0; i < buffer_count; i++)
+                    {
+                        out_buffers[i] = (void*)m->buffers[i];
+                    }
+                    out_index = 0;
+                }
+                break;
             }
         }
+        reply_confirm(payload[0]);
     }
 }
 
@@ -295,35 +284,29 @@ static void setup_pru()
 void setup_rpmsg()
 {
     volatile uint8_t *status;
-    /* allow OCP master port access by the PRU so the PRU can read external memories */
+
+    /* Allow OCP master port access by the PRU so the PRU can read external memories */
     CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
-    /* clear the status of event MB_INT_NUMBER (the mailbox event) and enable the mailbox event */
-    CT_INTC.SICR_bit.STS_CLR_IDX = MB_INT_NUMBER;
-    CT_MBX.IRQ[MB_USER].ENABLE_SET |= 1 << (MB_FROM_ARM_HOST * 2);
+    /* Clear the status of the PRU-ICSS system event that the ARM will use to 'kick' us */
+    CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 
     /* Make sure the Linux drivers are ready for RPMsg communication */
     status = &resourceTable.rpmsg_vdev.status;
     while (!(*status & VIRTIO_CONFIG_S_DRIVER_OK));
 
-    /* Initialize pru_virtqueue corresponding to vring0 (PRU to ARM Host direction) */
-    pru_virtqueue_init(&transport.virtqueue0, &resourceTable.rpmsg_vring0, &CT_MBX.MESSAGE[MB_TO_ARM_HOST], &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
-
-    /* Initialize pru_virtqueue corresponding to vring1 (ARM Host to PRU direction) */
-    pru_virtqueue_init(&transport.virtqueue1, &resourceTable.rpmsg_vring1, &CT_MBX.MESSAGE[MB_TO_ARM_HOST], &CT_MBX.MESSAGE[MB_FROM_ARM_HOST]);
+    /* Initialize the RPMsg transport structure */
+    pru_rpmsg_init(&transport, &resourceTable.rpmsg_vring0, &resourceTable.rpmsg_vring1, TO_ARM_HOST, FROM_ARM_HOST);
 
     /* Create the RPMsg channel between the PRU and ARM user space using the transport structure. */
-    while(pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, RPMSG_CHAN_NAME, RPMSG_CHAN_DESC, RPMSG_CHAN_PORT) != PRU_RPMSG_SUCCESS)
-    {
-        /* Try again */
-    }
+    while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, RPMSG_CHAN_NAME, RPMSG_CHAN_DESC, RPMSG_CHAN_PORT) != PRU_RPMSG_SUCCESS);
 
     for (int i = 0; i < BULK_SAMP_MAX_NUM_BUFFERS; i++)
     {
         out_buffers[i] = 0;
     }
 
-    send_message_debug("bulksamp pru firmware 2016", "Matt Johnston matt@ucc.asn.au", 0, 0, 0);
+    send_message_debug("bulksamp pru firmware 2019", "Matt Johnston matt@ucc.asn.au", 0, 0, 0);
 }
 
 // how many cycles between calls to GRAB_SAMPLE_INTERVAL, for testing.
@@ -358,8 +341,8 @@ void main() {
         }
 #endif
 
-        /* Check bit 31 of register R31 to see if the mailbox interrupt has occurred */
-        if(__R31 & ARM_INT) 
+        /* Check bit 31 of register R31 to see if the ARM has kicked us */
+        if (__R31 & HOST_INT) 
         {
             handle_rpmsg();
         }

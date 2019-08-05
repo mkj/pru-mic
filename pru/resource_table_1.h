@@ -66,11 +66,9 @@
 /* Definition for unused interrupts */
 #define HOST_UNUSED		255
 
-/* Mapping sysevts to a channel. Each pair contains a sysevt, channel
- * */
-struct ch_map pru_intc_map[] = { 
- /* Event 59 (Mbox1 mailbox interrupt for pru1) to channel 1 */
-	{59, 1},
+/* Mapping sysevts to a channel. Each pair contains a sysevt, channel. */
+struct ch_map pru_intc_map[] = { {18, 3},
+				 {19, 1},
 };
 
 struct my_resource_table {
@@ -133,10 +131,8 @@ struct my_resource_table resourceTable = {
 		sizeof(struct fw_rsc_custom_ints),
 		{ /* PRU_INTS version */
 		  0x0000,
-		  /* Channel-to-host mapping, 255 for unused
-		   * 		Mapping Channel-1 to Host-1 (PRU0/1 R31 bit 31)
-		   * */
-		  HOST_UNUSED, 1, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED,
+			/* Channel-to-host mapping, 255 for unused */
+			HOST_UNUSED, 1, HOST_UNUSED, 3, HOST_UNUSED,
 		  HOST_UNUSED, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED, HOST_UNUSED,
 		  /* Number of evts being mapped to channels */
 		  (sizeof(pru_intc_map) / sizeof(struct ch_map)),

@@ -7,8 +7,17 @@ else
 CLPRU=clpru
 endif
 
-ifndef PRU_C_DIR
-PRU_C_DIR="/usr/share/ti/cgt-pru/include;/usr/share/ti/cgt-pru/lib"
+# default paths for debian beaglebone
+ifndef PRU_C_INCLUDES
+PRU_C_INCLUDES=--include_path=/usr/share/ti/cgt-pru/include --include_path=/usr/share/ti/cgt-pru/lib
+endif
+
+ifndef PRU_C_LIBS
+PRU_C_LIBS=--search_path=/usr/share/ti/cgt-pru/include --search_path=/usr/share/ti/cgt-pru/lib
+endif
+
+ifndef PRUSDK
+PRUSDK=/usr/lib/ti/pru-software-support-package
 endif
 
 
@@ -16,8 +25,8 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_DIR := $(notdir $(patsubst %/,%,$(dir $(MKFILE_PATH))))
 PROJ_NAME=$(CURRENT_DIR)
 LINKER_COMMAND_FILE=./AM335x_PRU.cmd
-LIBS=--library=prusdk/lib/rpmsg_lib.lib
-INCLUDE=--include_path=prusdk/include --include_path=prusdk/include/am335x
+LIBS=$(PRU_C_LIBS) --library=$(PRUSDK)/lib/rpmsg_lib.lib
+INCLUDE=$(PRU_C_INCLUDES) --include_path=$(PRUSDK)/include --include_path=$(PRUSDK)/include/am335x
 STACK_SIZE=0x100
 HEAP_SIZE=0x100
 GEN_DIR=gen
@@ -59,7 +68,7 @@ $(GEN_DIR)/%.out: $(GEN_DIR)/%.object $(LINKER_COMMAND_FILE) $(COMMON_OBJECTS)
 	@echo ''
 	@echo 'Building target: $@'
 	@echo 'Invoking: PRU Linker'
-	$(CLPRU) $(CFLAGS) -z -i"$(PRU_C_DIR)" $(LFLAGS) -o $@ $^ -m$(MAP) --library=libc.a $(LIBS)
+	$(CLPRU) $(CFLAGS) -z $(LIBS) $(LFLAGS) -o $@ $^ -m$(MAP) --library=libc.a $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ''
 	@echo 'Output files can be found in the "$(GEN_DIR)" directory'
@@ -70,10 +79,10 @@ $(GEN_DIR)/%.object: %.c
 	@echo ''
 	@echo 'Building file: $<'
 	@echo 'Invoking: PRU Compiler'
-	$(CLPRU) --include_path="$(PRU_C_DIR)" $(INCLUDE) $(CFLAGS) -fe $@ $<
+	$(CLPRU) $(INCLUDE) $(CFLAGS) -fe $@ $<
 
 $(GEN_DIR)/%.object: %.asm
-	$(CLPRU) --include_path="$(PRU_C_DIR)" $(INCLUDE) $(CFLAGS) -fe $@ $<
+	$(CLPRU) $(INCLUDE) $(CFLAGS) -fe $@ $<
 
 install: $(TARGET)
 	@echo Installing
