@@ -92,6 +92,7 @@ install: $(TARGET)
 load:
 	#rmmod pru_rproc
 	#modprobe pru_rproc
+	./setpins
 	echo stop > /sys/class/remoteproc/remoteproc1/state || true
 	echo stop > /sys/class/remoteproc/remoteproc2/state || true
 	echo am335x-pru0-fw > /sys/class/remoteproc/remoteproc1/firmware
