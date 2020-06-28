@@ -1,0 +1,17 @@
+#!/bin/sh
+
+## /boot/uEnv.txt needs the following:
+# disable_uboot_overlay_video=1
+# disable_uboot_overlay_audio=1
+# enable_uboot_cape_universal=1
+
+# data3
+config-pin P9.25 pruin
+# clock
+config-pin P9.27 pruout
+# data2
+config-pin P9.28 pruin
+# data0
+config-pin P9.29 pruin
+# data1
+config-pin P9.30 pruin
