@@ -18,7 +18,7 @@ spec = (
     )
 
 
-@numba.jitclass(spec)
+@numba.experimental.jitclass(spec)
 class cic_n4m2(object):
     def __init__(self, rate):
         self.int = np.zeros(4, np.int64)

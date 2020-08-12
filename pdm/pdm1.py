@@ -30,9 +30,6 @@ INBLOCK_MS = 5
 
 DEFAULTBOOST=2
 
-class PDMException(Exception):
-    pass
-
 def demux(b):
     """ demultiplexes b """
     b.shape = (1,b.shape[0])
@@ -45,7 +42,7 @@ def demuxstream(f, chunk):
         bl = f.read(chunk)
         if len(bl) != chunk:
             return
-        r = np.fromstring(bl, count=chunk, dtype=np.uint8)
+        r = np.frombuffer(bl, count=chunk, dtype=np.uint8)
         yield demux(r)
 
 def bitexstream(f, chunk):
@@ -56,7 +53,7 @@ def bitexstream(f, chunk):
         bl = f.read(bytechunk)
         if len(bl) != bytechunk:
             return
-        r = np.fromstring(bl, count=bytechunk, dtype=np.uint8)
+        r = np.frombuffer(bl, count=bytechunk, dtype=np.uint8)
         n = np.unpackbits(r)
         n.shape = (1,n.shape[0])
         yield n
