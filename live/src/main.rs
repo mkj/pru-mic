@@ -34,6 +34,13 @@ struct Args {
     #[argh(option, short = 'w')]
     outwav: Option<String>,
 
+    /// CIC order (optional), default 4
+    #[argh(option, default = "4")]
+    order: usize,
+
+    /// apply FIR compensation filter (off by default)
+    #[argh(option, default = "false")]
+    fir: bool,
 }
 
 fn setup_log(debug: bool) -> Result<()> {
@@ -69,8 +76,7 @@ fn main() -> Result<()> {
 
     let stream = bulksamp::BulkSamp::new(&args.input)?;
 
-    let q = 5; // order
-    let mut cic = sdr::CIC::<bulksamp::Sample>::new(q, args.decim, 1);
+    let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
 
     let mut wav = if let Some(f) = args.outwav {
         match open_wav_out(&f) {
@@ -83,11 +89,18 @@ fn main() -> Result<()> {
         None
     };
 
+    let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
+
     for s in stream {
         let c = s?[args.channel];
         let wout = cic.process(&c);
+        let wout = if args.fir {
+            fir.process(&wout)
+        } else {
+            wout
+        };
         //println!("c {:?}", c);
-        println!("wout {:?}", wout);
+        //println!("wout {:?}", wout);
         if let Some(ref mut w) = wav {
             for s in wout {
                 w.write_sample(s)?;

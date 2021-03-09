@@ -7,7 +7,7 @@ use std::io::{Read,BufReader};
 
 // TODO: const generics
 // Samples per channel per chunk. bytes of input, bits per channel of output
-const CHUNK: usize = 64;
+const CHUNK: usize = 1024;
 pub type Sample = i32;
 
 pub struct BulkSamp {
