@@ -1,0 +1,13 @@
+# Cross compiling for alsa
+in ubmpy:~/tmp/bb 
+
+# exclude most .a files, it's smaller that way.
+
+rsync -axHvP  beaglebone.local:/ root/ --include usr --include usr/lib --include usr/include  --include '**libc_nonshared.a' --exclude '**.a'  --include usr/lib/'**' --include usr/include/'**' --include lib --include lib/arm-linux-gnueabihf --include lib/arm-linux-gnueabihf/'**' --exclude '**' --delete-excluded
+
+## rsync -axHvP  beaglebone.local:/ root/ --include usr --include usr/lib --include usr/include  --include usr/lib/'**' --include usr/include/'**' --include lib --include lib/arm-linux-gnueabihf --include lib/arm-linux-gnueabihf/'**' --exclude '**' --delete-excluded
+
+# bodge alsa.pc to have a blank linker line. Then give it libasound.so manually.
+
+env PKG_CONFIG_SYSROOT_DIR=/home/matt/tmp/bb/root PKG_CONFIG_PATH=/home/matt/tmp/bb/root/usr/lib/arm-linux-gnueabihf/pkgconfig PKG_CONFIG_ALLOW_CROSS=true CARGO_TARGET_THUMBV7NEON_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS="-C link-arg=/home/matt/tmp/bb/root/usr/lib/arm-linux-gnueabihf/libasound.so"  cargo build --release --target=thumbv7neon-unknown-linux-gnueabihf
+
