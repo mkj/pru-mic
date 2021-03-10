@@ -34,12 +34,16 @@ struct Args {
     #[argh(option, short = 'w')]
     outwav: Option<String>,
 
+    /// play output
+    #[argh(switch, short = 'w')]
+    play: bool,
+
     /// CIC order (optional), default 4
     #[argh(option, default = "4")]
     order: usize,
 
     /// apply FIR compensation filter (off by default)
-    #[argh(option, default = "false")]
+    #[argh(switch)]
     fir: bool,
 }
 
@@ -74,6 +78,10 @@ fn main() -> Result<()> {
     let args: Args = argh::from_env();
     setup_log(args.debug)?;
 
+    // graceful exit
+    let term = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, term.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, term.clone())?;
 
     let mut wav = if let Some(f) = args.outwav {
         match open_wav_out(&f) {
@@ -91,6 +99,10 @@ fn main() -> Result<()> {
     let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
 
     for s in stream {
+        if term.load(core::sync::atomic::Ordering::Relaxed) {
+            info!("Exiting");
+            break;
+        }
         let s = s?;
         let c = &s[0];
         let wout = cic.process(c);

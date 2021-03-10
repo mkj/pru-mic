@@ -12,12 +12,14 @@ sdr = { git = "https://github.com/mkj/sdr-rs" }
 # sdr = { path = "../../../sdr-rs" }
 # wav IO
 hound = "3.4"
+cpal = "0.13"
 
 # and the basics
 anyhow = "1.0"
 argh = "0.1"
 log = "0.4"
 simplelog = "0.8"
+signal-hook = "0.3"
 
 # speed the build a bit
 [profile.release]
