@@ -74,9 +74,6 @@ fn main() -> Result<()> {
     let args: Args = argh::from_env();
     setup_log(args.debug)?;
 
-    let stream = bulksamp::BulkSamp::new(&args.input)?;
-
-    let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
 
     let mut wav = if let Some(f) = args.outwav {
         match open_wav_out(&f) {
@@ -89,11 +86,14 @@ fn main() -> Result<()> {
         None
     };
 
+    let stream = bulksamp::BulkSamp::new(&args.input, &[args.channel])?;
+    let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
     let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
 
     for s in stream {
-        let c = s?[args.channel];
-        let wout = cic.process(&c);
+        let s = s?;
+        let c = &s[0];
+        let wout = cic.process(c);
         let wout = if args.fir {
             fir.process(&wout)
         } else {

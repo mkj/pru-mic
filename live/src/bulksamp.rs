@@ -12,21 +12,26 @@ pub type Sample = i32;
 
 pub struct BulkSamp {
     inf: std::io::BufReader<std::fs::File>,
+    want_chans: Vec<usize>,
 }
 
 impl BulkSamp {
-    pub fn new(infile: &str) -> Result<Self> {
+    pub fn new(infile: &str, want_chans: &[usize]) -> Result<Self> {
+
+        let f = std::fs::File::open(infile)
+        .with_context(|| format!("Opening {}", infile))?;
 
         Ok(BulkSamp {
             // TODO: perhaps with_capacity() for lower latency?
             // Default 8kB is 2ms.
-            inf: BufReader::new(std::fs::File::open(infile)?),
+            inf: BufReader::new(f),
+            want_chans: want_chans.to_vec(),
         })
     }
 }
 
 impl Iterator for BulkSamp {
-    type Item = Result<[[Sample; CHUNK]; 8]>;
+    type Item = Result<Vec<[Sample; CHUNK]>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut buf = [0u8; CHUNK];
@@ -43,10 +48,13 @@ impl Iterator for BulkSamp {
         };
 
         // demultiplex
-        let mut res = [[0 as Sample; CHUNK]; 8];
+        let mut res = vec!();
+        for _ in &self.want_chans {
+            res.push([0 as Sample; CHUNK]);
+        }
         for i in 0..CHUNK {
-            for c in 0..8 {
-                res[c][i] = ((((buf[i] >> c) & 1) as i32) << 16) - 32768;
+            for (n, c) in self.want_chans.iter().enumerate() {
+                res[n][i] = ((((buf[i] >> c) & 1) as i32) << 16) - 32768;
             }
         }
         Some(Ok(res))
