@@ -7,6 +7,7 @@ use simplelog::{CombinedLogger,LevelFilter,TermLogger,TerminalMode};
 
 use std::io::BufWriter;
 use std::fs::File;
+use dasp::{Signal,ring_buffer::Bounded};
 
 mod bulksamp;
 
@@ -18,25 +19,31 @@ struct Args {
     /// verbose debug logging
     debug: bool,
 
-    /// input device, default /dev/bulk_samp31
-    #[argh(option, short = 'd', default = "\"/dev/bulk_samp31\".to_string()")]
-    input: String,
+    /// input PDM file. If not given will use mic device /dev/bulk_samp31
+    #[argh(option, short = 'i')]
+    input: Option<String>,
+
+    /// save PDM file
+    #[argh(option, short = 's')]
+    save: Option<String>,
 
     /// channel 0-7, default 2
     #[argh(option, short = 'c', default = "2")]
     channel: usize,
 
-    /// decim - the downsampling rate, default 64
-    #[argh(option, short = 'r', default = "64")]
+    /// decim - the downsampling rate, default 91
+    #[argh(option, short = 'r', default = "91")]
     decim: usize,
 
     /// output wav file (optional)
     #[argh(option, short = 'w')]
     outwav: Option<String>,
 
+    /*
     /// play output
     #[argh(switch, short = 'w')]
     play: bool,
+    */
 
     /// CIC order (optional), default 4
     #[argh(option, default = "4")]
@@ -74,14 +81,23 @@ fn open_wav_out(wav_filename: &str) -> Result<hound::WavWriter<BufWriter<File>>>
     hound::WavWriter::create(wav_filename, spec).context("Error opening output wavfile")
 }
 
+const BULK_SAMP_DEVICE: &str = "/dev/bulk_samp31";
+
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
     setup_log(args.debug)?;
-
     // graceful exit
     let term = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, term.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, term.clone())?;
+
+    let inpdm = if let Some(f) = args.input {
+        info!("Reading PDM from input file {}", f);
+        f
+    } else {
+        info!("PDM input from mic");
+        BULK_SAMP_DEVICE.into()
+    };
 
     let mut wav = if let Some(f) = args.outwav {
         match open_wav_out(&f) {
@@ -94,29 +110,51 @@ fn main() -> Result<()> {
         None
     };
 
-    let stream = bulksamp::BulkSamp::new(&args.input, &[args.channel])?;
+    let mut stream = bulksamp::BulkSamp::new(&inpdm, args.channel, args.decim)?;
     let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
     let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
 
-    for s in stream {
+    // let liveaudio = if args.play {
+    //     Some(())
+    // } else {
+    //     None
+    // };
+
+    // let ring_buffer = Bounded::from(vec![0 as bulksamp::Sample; args.decim]);
+    // let mut buffered_stream = stream.buffered(ring_buffer);
+
+    let mut total = 0;
+    loop {
         if term.load(core::sync::atomic::Ordering::Relaxed) {
             info!("Exiting");
             break;
         }
-        let s = s?;
-        let c = &s[0];
-        let wout = cic.process(c);
+
+        // TODO: how can we handle exhaustion of stream?
+        let inp = stream.by_ref().take(args.decim).collect::<Vec<_>>();
+        total += inp.len();
+        debug!("inp {} total {}", inp.len(), total);
+        let wout = cic.process(&inp);
         let wout = if args.fir {
             fir.process(&wout)
         } else {
             wout
         };
-        //println!("c {:?}", c);
-        //println!("wout {:?}", wout);
+
         if let Some(ref mut w) = wav {
             for s in wout {
                 w.write_sample(s)?;
             }
+        }
+
+        debug!("buf");
+
+        if stream.is_exhausted() {
+            debug!("exhausted");
+            if let Err(e) = stream.is_error() {
+                warn!("Error from input {}", e);
+            }
+            break;
         }
     }
 

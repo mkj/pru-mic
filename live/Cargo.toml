@@ -13,6 +13,8 @@ sdr = { git = "https://github.com/mkj/sdr-rs" }
 # wav IO
 hound = "3.4"
 cpal = "0.13"
+# TODO could reduce features later
+dasp = { version = "0.11", features = [ "signal", "interpolate", "ring_buffer" ] }
 
 # and the basics
 anyhow = "1.0"
