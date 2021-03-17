@@ -12,11 +12,12 @@ pub type Sample = i32;
 
 pub struct BulkSamp {
     inf: std::io::BufReader<std::fs::File>,
-    want_chans: Vec<usize>,
+    want_chan: usize,
+    read_buf: Vec<u8>,
 }
 
 impl BulkSamp {
-    pub fn new(infile: &str, want_chans: &[usize]) -> Result<Self> {
+    pub fn new(infile: &str, want_chan: usize, block_size: usize) -> Result<Self> {
 
         let f = std::fs::File::open(infile)
         .with_context(|| format!("Opening {}", infile))?;
@@ -25,38 +26,28 @@ impl BulkSamp {
             // TODO: perhaps with_capacity() for lower latency?
             // Default 8kB is 2ms.
             inf: BufReader::new(f),
-            want_chans: want_chans.to_vec(),
+            want_chan,
+            read_buf: vec![0u8; (CHUNK/block_size)*block_size],
         })
     }
 }
 
 impl Iterator for BulkSamp {
-    type Item = Result<Vec<[Sample; CHUNK]>>;
+    type Item = Result<Vec<Sample>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut buf = [0u8; CHUNK];
-        match self.inf.read(&mut buf) {
-            Ok(nread) => {
-                if nread < CHUNK {
-                    // discard the last chunk if it's not a full multiple!
-                    return None
-                }
+        if let Err(e) = self.inf.read_exact(&mut self.read_buf) {
+            if e.kind() != std::io::ErrorKind::UnexpectedEof {
+                return Some(Err(e).context("Error reading input"));
             }
-            Err(e) => {
-                return Some(Err(e).context("Error reading input"))
-            }
-        };
+            // XXX: this usually drops the last few samples
+            return None;
+        }
 
         // demultiplex
-        let mut res = vec!();
-        for _ in &self.want_chans {
-            res.push([0 as Sample; CHUNK]);
-        }
-        for i in 0..CHUNK {
-            for (n, c) in self.want_chans.iter().enumerate() {
-                res[n][i] = ((((buf[i] >> c) & 1) as i32) << 16) - 32768;
-            }
-        }
+        let res = self.read_buf.iter()
+        .map(|r| ((((r >> self.want_chan) & 1) as i32) << 16) - 32768)
+        .collect();
         Some(Ok(res))
     }
 }

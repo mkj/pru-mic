@@ -19,7 +19,7 @@ struct Args {
     debug: bool,
 
     /// input device, default /dev/bulk_samp31
-    #[argh(option, short = 'd', default = "\"/dev/bulk_samp31\".to_string()")]
+    #[argh(option, short = 'i', default = "\"/dev/bulk_samp31\".to_string()")]
     input: String,
 
     /// channel 0-7, default 2
@@ -79,9 +79,9 @@ fn main() -> Result<()> {
     setup_log(args.debug)?;
 
     // graceful exit
-    let term = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, term.clone())?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, term.clone())?;
+    let terminate = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, terminate.clone())?;
 
     let mut wav = if let Some(f) = args.outwav {
         match open_wav_out(&f) {
@@ -94,18 +94,17 @@ fn main() -> Result<()> {
         None
     };
 
-    let stream = bulksamp::BulkSamp::new(&args.input, &[args.channel])?;
+    let stream = bulksamp::BulkSamp::new(&args.input, args.channel, args.decim)?;
     let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
     let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
 
     for s in stream {
-        if term.load(core::sync::atomic::Ordering::Relaxed) {
+        if terminate.load(core::sync::atomic::Ordering::Relaxed) {
             info!("Exiting");
             break;
         }
         let s = s?;
-        let c = &s[0];
-        let wout = cic.process(c);
+        let wout = cic.process(&s);
         let wout = if args.fir {
             fir.process(&wout)
         } else {
