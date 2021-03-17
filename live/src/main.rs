@@ -11,11 +11,11 @@ use std::fs::File;
 mod bulksamp;
 
 #[derive(argh::FromArgs)]
-/** AnyPitch
+/** PDM to wav file.
 Matt Johnston 2021 matt@ucc.asn.au */
 struct Args {
-    #[argh(switch, short='v')]
     /// verbose debug logging
+    #[argh(switch, short='v')]
     debug: bool,
 
     /// input device, default /dev/bulk_samp31
@@ -26,17 +26,18 @@ struct Args {
     #[argh(option, short = 'c', default = "2")]
     channel: usize,
 
-    /// decim - the downsampling rate, default 64
-    #[argh(option, short = 'r', default = "64")]
+    /// decim - the downsampling rate, default 91 (approx realtime = 4e6/44100)
+    /// eg "-r 9" will be ~10x slowdown
+    #[argh(option, short = 'r', default = "91")]
     decim: usize,
 
     /// output wav file (optional)
     #[argh(option, short = 'w')]
     outwav: Option<String>,
 
-    /// play output
-    #[argh(switch, short = 'w')]
-    play: bool,
+    // /// play output
+    // #[argh(switch, short = 'w')]
+    // play: bool,
 
     /// CIC order (optional), default 4
     #[argh(option, default = "4")]
@@ -83,8 +84,8 @@ fn main() -> Result<()> {
     signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, terminate.clone())?;
 
-    let mut wav = if let Some(f) = args.outwav {
-        match open_wav_out(&f) {
+    let mut wav = if let Some(ref wfn) = args.outwav {
+        match open_wav_out(wfn) {
             Ok(w) => Some(w),
             // faffing around because hound's Error is odd?
             // https://github.com/dtolnay/anyhow/issues/35#issuecomment-547986739
@@ -98,9 +99,10 @@ fn main() -> Result<()> {
     let mut cic = sdr::CIC::<bulksamp::Sample>::new(args.order, args.decim, 1);
     let mut fir = sdr::FIR::<i32>::cic_compensator(63, args.order, args.decim, 1);
 
+    info!("Running, input from {}", args.input);
+
     for s in stream {
         if terminate.load(core::sync::atomic::Ordering::Relaxed) {
-            info!("Exiting");
             break;
         }
         let s = s?;
@@ -117,6 +119,13 @@ fn main() -> Result<()> {
                 w.write_sample(s)?;
             }
         }
+    }
+    if let Some(ref wfn) = args.outwav {
+        wav.unwrap().finalize()?;
+        info!("Wrote wav file {}", wfn);
+    }
+    else {
+        info!("Finished.");
     }
 
     Ok(())
