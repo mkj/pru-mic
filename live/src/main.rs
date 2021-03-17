@@ -35,6 +35,10 @@ struct Args {
     #[argh(option, short = 'w')]
     outwav: Option<String>,
 
+    /// scale output amplitude
+    #[argh(option, short = 's', default = "1f32")]
+    scaleamp: f32,
+
     // /// play output
     // #[argh(switch, short = 'w')]
     // play: bool,
@@ -115,8 +119,18 @@ fn main() -> Result<()> {
         //println!("c {:?}", c);
         //println!("wout {:?}", wout);
         if let Some(ref mut w) = wav {
-            for s in wout {
-                w.write_sample(s)?;
+            if args.scaleamp == 1f32 {
+                for s in wout {
+                    let scals = s.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+                    w.write_sample(scals)?
+                }
+            } else {
+                for s in wout {
+                    let scals = ((s as f32) * args.scaleamp)
+                    .clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                    w.write_sample(scals)?;
+                }
+
             }
         }
     }
