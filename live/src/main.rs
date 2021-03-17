@@ -123,7 +123,6 @@ fn main() -> Result<()> {
     // let ring_buffer = Bounded::from(vec![0 as bulksamp::Sample; args.decim]);
     // let mut buffered_stream = stream.buffered(ring_buffer);
 
-    let mut total = 0;
     loop {
         if term.load(core::sync::atomic::Ordering::Relaxed) {
             info!("Exiting");
@@ -132,8 +131,6 @@ fn main() -> Result<()> {
 
         // TODO: how can we handle exhaustion of stream?
         let inp = stream.by_ref().take(args.decim).collect::<Vec<_>>();
-        total += inp.len();
-        debug!("inp {} total {}", inp.len(), total);
         let wout = cic.process(&inp);
         let wout = if args.fir {
             fir.process(&wout)
@@ -146,8 +143,6 @@ fn main() -> Result<()> {
                 w.write_sample(s)?;
             }
         }
-
-        debug!("buf");
 
         if stream.is_exhausted() {
             debug!("exhausted");

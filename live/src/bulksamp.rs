@@ -52,7 +52,7 @@ impl Signal for BulkSamp {
 
     fn next(&mut self) -> Self::Frame {
         // XXX allocation
-        let mut buf = vec![0u8; self.actual_chunk];
+        let mut buf = vec![0u8; 1];
 
         if self.finished {
             return Self::Frame::EQUILIBRIUM;
