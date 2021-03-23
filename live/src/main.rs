@@ -7,6 +7,10 @@ use simplelog::{CombinedLogger,LevelFilter,TermLogger,TerminalMode};
 
 use std::io::BufWriter;
 use std::fs::File;
+use std::sync::Arc;
+use core::sync::atomic::AtomicBool;
+use std::time::Duration;
+
 use dasp::{Signal,ring_buffer::Bounded};
 
 mod bulksamp;
@@ -52,7 +56,27 @@ struct Args {
     /// apply FIR compensation filter (off by default)
     #[argh(switch)]
     fir: bool,
+
+    #[argh(subcommand)]
+    command: Option<CommandEnum>,
 }
+
+/// run benchmark
+#[derive(argh::FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
+enum CommandEnum {
+    Bench(BenchArgs),
+}
+
+#[derive(argh::FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "bench")]
+/// run a benchmark
+struct BenchArgs {
+    /// run time, default 3 seconds
+    #[argh(option, default = "3.0")]
+    time: f32,
+}
+
 
 fn setup_log(debug: bool) -> Result<()> {
     let level = match debug {
@@ -86,10 +110,34 @@ const BULK_SAMP_DEVICE: &str = "/dev/bulk_samp31";
 fn main() -> Result<()> {
     let args: Args = argh::from_env();
     setup_log(args.debug)?;
-    // graceful exit
-    let term = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, term.clone())?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, term.clone())?;
+
+    match args.command {
+        Some(CommandEnum::Bench(_)) => {
+            return bench(args);
+        },
+        None => (),
+    };
+    // graceful exit on signal.
+    let terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, terminate.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, terminate.clone())?;
+    run_loop(args, terminate)
+}
+
+fn bench(args: Args) -> Result<()> {
+    let terminate = Arc::new(AtomicBool::new(false));
+    let t = terminate.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(3));
+        t.store(true, core::sync::atomic::Ordering::Relaxed);
+    });
+
+    run_loop(args, terminate)?;
+
+    Ok(())
+}
+
+fn run_loop(args: Args, terminate: Arc<AtomicBool>) -> Result<()> {
 
     let inpdm = if let Some(f) = args.input {
         info!("Reading PDM from input file {}", f);
@@ -124,7 +172,7 @@ fn main() -> Result<()> {
     // let mut buffered_stream = stream.buffered(ring_buffer);
 
     loop {
-        if term.load(core::sync::atomic::Ordering::Relaxed) {
+        if terminate.load(core::sync::atomic::Ordering::Relaxed) {
             info!("Exiting");
             break;
         }
